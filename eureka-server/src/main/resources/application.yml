@@ -1,0 +1,18 @@
+spring:
+  application:
+    name: eureka-service
+  autoconfigure:
+    exclude:
+    - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration  # Exclude DataSource auto-configuration
+
+server:
+  port: 8761
+
+# Eureka server configuration
+eureka:
+  client:
+    register-with-eureka: false
+    fetch-registry: false
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+      enable-self-preservation: false

@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: gateway
+  datasource:
+    url: jdbc:mysql://192.168.189.135:3306/learning?useSSL=false&serverTimezone=UTC
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 30
+      minimum-idle: 20
+      idle-timeout: 30000
+      connection-timeout: 80000
