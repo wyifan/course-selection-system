@@ -7,10 +7,10 @@ spring:
     password: 123456
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 30
-      minimum-idle: 20
+      maximum-pool-size: 10
+      minimum-idle: 5
       idle-timeout: 30000
-      connection-timeout: 80000
+      connection-timeout: 30000
 mybatis-plus: 
   configuration:
     map-underscore-to-camel-case: true
@@ -27,4 +27,8 @@ eureka:
   client:
     service-url:
       defaultZone: http://localhost:8761/eureka/
-  
+    register-with-eureka: true
+    fetch-registry: true
+  instance:
+    lease-expiration-duration-in-seconds: 90
+    lease-renewal-interval-in-seconds: 30

@@ -2,15 +2,10 @@ package com.yifan.log_service.controller;
 
 import java.util.List;
 
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
 
 import com.yifan.log_service.entity.LogEntry;
 import com.yifan.log_service.service.LogService;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/logs")
