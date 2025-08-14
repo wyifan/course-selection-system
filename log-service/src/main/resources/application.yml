@@ -32,3 +32,13 @@ eureka:
   instance:
     lease-expiration-duration-in-seconds: 90
     lease-renewal-interval-in-seconds: 30
+
+# springdoc:
+#   api-docs: 
+#     enabled: true
+#     path: /api-docs #自定义 OpenAPI JSON 路径（默认 /v3/api-docs）
+#   swagger-ui:
+#     enabled: true
+#     path: /swagger-ui-custom.html # 自定义 Swagger UI 路径（默认 /swagger-ui.html）
+#   show-actuator: true # 如果需要显示 Actuator 端点
+  
