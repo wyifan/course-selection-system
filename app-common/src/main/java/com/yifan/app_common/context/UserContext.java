@@ -1,6 +1,6 @@
 package com.yifan.app_common.context;
 
-import com.yifan.app_common.entity.UserInfo;
+import com.yifan.app_common.base.entity.UserInfo;
 
 public class UserContext {
     private static final ThreadLocal<UserInfo> USER_HOLDER = new ThreadLocal<>();
@@ -18,7 +18,7 @@ public class UserContext {
     }
 
     public static void clear() {
-        USER_HOLDER.remove(); // 必须清理，防止内存泄漏
+        USER_HOLDER.remove(); 
     }
 
 }
