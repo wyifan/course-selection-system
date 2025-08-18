@@ -26,6 +26,7 @@
 		<module>notification-service</module>
 		<module>log-service</module>
 		<module>api-client</module>
+		<module>app-common</module>
 	</modules>
 	<url />
 	<licenses>

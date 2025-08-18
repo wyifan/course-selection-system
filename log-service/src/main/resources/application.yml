@@ -20,7 +20,7 @@ mybatis-plus:
       id-type: auto
 
 server:
-  port: 8701
+  port: 8709
 
 #enable eureka client
 eureka:

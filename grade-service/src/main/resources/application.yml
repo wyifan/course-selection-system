@@ -1,3 +1,6 @@
+server:
+  port: 8708
+
 spring:
   application:
     name: grade-service

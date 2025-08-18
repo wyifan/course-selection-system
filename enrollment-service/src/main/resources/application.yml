@@ -1,3 +1,6 @@
+server:
+  port: 8707
+
 spring:
   application:
     name: enrollment-service
