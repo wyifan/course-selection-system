@@ -23,6 +23,7 @@ public class JacksonConfig {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern(DATE_TIME_FORMAT);
             builder.serializers(new LocalDateTimeSerializer(formatter));
 
+            // 1234567890123456789L
             builder.serializerByType(Long.class, new JsonSerializer<Long>() {
                 @Override
                 public void serialize(Long value, JsonGenerator gen, SerializerProvider serializers)
