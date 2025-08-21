@@ -2,7 +2,7 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0"
 	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
-	<modelVersion>4.0.0</modelVersion>	
+	<modelVersion>4.0.0</modelVersion>
 	<groupId>com.yifan</groupId>
 	<artifactId>course-selection-system</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
@@ -14,6 +14,7 @@
 		<module>gateway</module>
 		<module>auth-service</module>
 		<module>organization-service</module>
+		<module>code-generater</module>
 		<module>course-service</module>
 		<module>enrollment-service</module>
 		<module>grade-service</module>
@@ -37,12 +38,15 @@
 	</scm>
 	<properties>
 		<java.version>17</java.version>
+		<project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 		<spring-cloud.version>2025.0.0</spring-cloud.version>
 		<mybatis-plus.version>3.5.5</mybatis-plus.version>
 		<mysql.version>9.3.0</mysql.version>
 		<spring-boot.version>3.5.4</spring-boot.version>
 		<swagger.version>2.8.9</swagger.version>
 		<feign.version>4.1.3</feign.version>
+		<jakarta.servlet.version>6.0.0</jakarta.servlet.version>
+		<freemarker.version>2.3.33</freemarker.version>
 		<resilience4j.version>2.2.0</resilience4j.version>
 	</properties>
 	<dependencies>
@@ -69,7 +73,7 @@
 			<dependency>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-starter-web</artifactId>
-				<version>${spring-boot.version}</version>			
+				<version>${spring-boot.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>org.springframework.boot</groupId>
@@ -99,6 +103,17 @@
 				<groupId>org.springframework.cloud</groupId>
 				<artifactId>spring-cloud-starter-openfeign</artifactId>
 				<version>${feign.version}</version> <!-- Matches spring-cloud.version -->
+			</dependency>
+			<dependency>
+				<groupId>jakarta.servlet</groupId>
+				<artifactId>jakarta.servlet-api</artifactId>
+				<version>${jakarta.servlet.version}</version> <!-- Or a compatible version for your environment -->
+				<scope>provided</scope> <!-- Or compile, depending on your setup -->
+			</dependency>
+			<dependency>
+				<groupId>org.freemarker</groupId>
+				<artifactId>freemarker</artifactId>
+				<version>${freemarker.version}</version>
 			</dependency>
 			<dependency>
 				<groupId>io.github.resilience4j</groupId>

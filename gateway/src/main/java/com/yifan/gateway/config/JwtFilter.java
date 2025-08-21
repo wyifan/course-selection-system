@@ -1,7 +1,7 @@
 
 package com.yifan.gateway.config;
 
-import com.example.common.util.JwtUtil;  // 从common-module导入
+
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -16,6 +16,8 @@ import org.springframework.security.web.util.matcher.AntPathRequestMatcher;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import org.springframework.web.util.ContentCachingRequestWrapper;
+
+import com.yifan.gateway.util.JwtUtil;
 
 import java.io.IOException;
 import java.util.List;

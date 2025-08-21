@@ -1,0 +1,8 @@
+spring:
+  application:
+    name: code-generator
+  datasource: 
+    url: jdbc:mysql://192.168.189.135:3306/learning?useSSL=false&serverTimezone=UTC
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.cj.jdbc.Driver

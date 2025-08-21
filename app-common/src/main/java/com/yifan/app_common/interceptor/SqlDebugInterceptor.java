@@ -1,24 +1,19 @@
 package com.yifan.app_common.interceptor;
 
+import lombok.extern.slf4j.Slf4j;
+import org.apache.ibatis.executor.statement.StatementHandler;
+import org.apache.ibatis.mapping.BoundSql;
+import org.apache.ibatis.plugin.*;
+
 import java.sql.Connection;
 import java.util.Properties;
 
-import org.apache.ibatis.executor.statement.StatementHandler;
-import org.apache.ibatis.mapping.BoundSql;
-import org.apache.ibatis.plugin.Interceptor;
-import org.apache.ibatis.plugin.Intercepts;
-import org.apache.ibatis.plugin.Invocation;
-import org.apache.ibatis.plugin.Plugin;
-import org.apache.ibatis.plugin.Signature;
-
-import lombok.extern.slf4j.Slf4j;
-
 @Intercepts({
-    @Signature(
-        type = StatementHandler.class,
-        method = "prepare",
-        args = {Connection.class, Integer.class}
-    )
+        @Signature(
+                type = StatementHandler.class,
+                method = "prepare",
+                args = {Connection.class, Integer.class}
+        )
 })
 @Slf4j
 public class SqlDebugInterceptor implements Interceptor {
@@ -32,7 +27,7 @@ public class SqlDebugInterceptor implements Interceptor {
         String sql = boundSql.getSql();
 
         log.info("========== SQL Debug Interceptor Begin =========");
-        log.info("SQL: " + sql);  // 打印SQL语句
+        log.info("SQL: {}", sql);  // 打印SQL语句
         log.info("========== SQL Debug Interceptor End =========");
 
         // 在这里可以添加拦截逻辑
