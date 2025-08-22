@@ -5,12 +5,12 @@
 
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.yifan</groupId>
-    <artifactId>yifan-generate-plugin</artifactId>
+    <artifactId>codegen-maven-plugin</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <packaging>maven-plugin</packaging>
 
 
-    <name>yifan-generate-plugin Maven Mojo</name>
+    <name>codegen-maven-plugin Maven Mojo</name>
     <url>http://maven.apache.org</url>
     <description>Code generator for mybatis plus</description>
 
@@ -18,8 +18,7 @@
         <java.version>17</java.version>
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.source>17</maven.compiler.source>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <spring-cloud.version>2025.0.0</spring-cloud.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>       
         <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <mysql.version>9.3.0</mysql.version>
         <spring-boot.version>3.5.4</spring-boot.version>
@@ -28,13 +27,6 @@
         <freemarker.version>2.3.33</freemarker.version>
     </properties>
     <dependencies>
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <version>1.18.34</version>
-            <optional>true</optional>
-            <scope>provided</scope>
-        </dependency>
         <!-- 添加 Maven plugin 依赖 -->
         <!--maven-plugin-api
         provide necessary classes and interfaces to create our mojo -->
@@ -42,6 +34,7 @@
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-plugin-api</artifactId>
             <version>3.6.3</version>
+            <scope>provided</scope>
         </dependency>
         <!-- comes in handy to use annotations in our classes-->
         <dependency>
@@ -55,6 +48,7 @@
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-project</artifactId>
             <version>2.2.1</version>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -90,12 +84,7 @@
                 <groupId>com.mysql</groupId>
                 <artifactId>mysql-connector-j</artifactId>
                 <version>${mysql.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.springframework.cloud</groupId>
-                <artifactId>spring-cloud-starter-openfeign</artifactId>
-                <version>${feign.version}</version> <!-- Matches spring-cloud.version -->
-            </dependency>
+            </dependency>          
             <dependency>
                 <groupId>jakarta.servlet</groupId>
                 <artifactId>jakarta.servlet-api</artifactId>
@@ -109,7 +98,6 @@
             </dependency>
         </dependencies>
     </dependencyManagement>
-
     <build>
         <plugins>
             <plugin>
@@ -117,7 +105,7 @@
                 <artifactId>maven-plugin-plugin</artifactId>
                 <version>3.13.1</version>
                 <configuration>
-                    <goalPrefix>yifan</goalPrefix>
+                    <goalPrefix>codegen</goalPrefix>
                 </configuration>
                 <executions>
                     <execution>
@@ -125,6 +113,12 @@
                         <phase>process-classes</phase>
                         <goals>
                             <goal>descriptor</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>help-mojo</id>
+                        <goals>
+                            <goal>helpmojo</goal>
                         </goals>
                     </execution>
                 </executions>
@@ -141,6 +135,14 @@
             </plugin>
         </plugins>
     </build>
-
+    <reporting>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-project-info-reports-plugin</artifactId>
+                <version>3.1.2</version>
+            </plugin>
+        </plugins>
+    </reporting>
 
 </project>

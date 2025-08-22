@@ -1,4 +1,4 @@
-package com.yifan.yifan_generate_plugin;
+package com.yifan.codegen_maven_plugin;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
@@ -23,10 +23,15 @@ public class DependencyCounterMojo extends AbstractMojo {
 
     public void execute() throws MojoExecutionException, MojoFailureException {
         List<Dependency> dependencies = project.getDependencies();
+
         long numDependencies = dependencies.stream()
-                .filter(dep -> scope == null || scope.isEmpty() || scope.equals(dep.getScope()))
+                .filter(dep -> {
+                    getLog().info("dependency scope: " + dep.getScope());
+                    return scope == null || scope.isEmpty() || scope.equalsIgnoreCase(dep.getScope());
+                })
                 .count();
         // getLog() provides access to the logging system
+        getLog().info("parameter scope: " + scope);
         getLog().info("Number of dependencies: " + numDependencies);
     }
 }
