@@ -3,7 +3,7 @@ package com.yifan.codegen_maven_plugin.engine;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateExceptionHandler;
-import freemarker.cache.ClassTemplateLoader;
+import freemarker.cache.FileTemplateLoader;
 
 import java.io.File;
 import java.io.Writer;
@@ -27,31 +27,32 @@ public class TemplateEngine {
     private final Configuration cfg;
     private final ConfigFromYml config;
 
-    public TemplateEngine(Class<?> loadingClass, ConfigFromYml config) throws Exception {
+    public TemplateEngine(ConfigFromYml config) throws Exception {
         cfg = new Configuration(Configuration.VERSION_2_3_33);
-        // cfg.setClassLoaderForTemplateLoading(getClass().getClassLoader(),
-        // "templates");
-        ClassTemplateLoader templateLoader = new ClassTemplateLoader(loadingClass, "/templates");
-        cfg.setTemplateLoader(templateLoader);
 
-        cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
+        // 使用当前线程的类加载器，并从类路径的根目录开始加载
+        cfg.setClassLoaderForTemplateLoading(Thread.currentThread().getContextClassLoader(), "templates");
+
+        log.info("Freemarker is attempting to load templates from path: templates/");
+
         cfg.setDefaultEncoding("UTF-8");
 
         this.config = config;
     }
 
-    // public void generateEntity(TableMeta table, GenerateConfig config) throws
-    // Exception {
-    // Template template = cfg.getTemplate("Entity.ftl");
-    // File outputDir = new File(config.getOutputDir() + "/entity");
-    // if (!outputDir.exists())
-    // outputDir.mkdirs();
-    // File outputFile = new File(outputDir, table.getEntityName() + ".java");
+    public TemplateEngine(File templateDir, ConfigFromYml config) throws Exception {
+        cfg = new Configuration(Configuration.VERSION_2_3_33);
 
-    // try (Writer writer = new FileWriter(outputFile)) {
-    // template.process(table, writer);
-    // }
-    // }
+        // 打印出Freemarker正在使用的类和路径，以供调试
+        log.info("Freemarker is attempting to load templates from: " +
+                File.pathSeparator + templateDir.getAbsolutePath());
+        FileTemplateLoader fileTemplateLoader = new FileTemplateLoader(templateDir);
+        cfg.setTemplateLoader(fileTemplateLoader);
+        cfg.setDefaultEncoding("UTF-8");
+        cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
+
+        this.config = config;
+    }
 
     /**
      * 生成 BaseEntity

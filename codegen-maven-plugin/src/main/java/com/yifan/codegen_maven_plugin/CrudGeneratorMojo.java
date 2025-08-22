@@ -16,6 +16,7 @@ import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
 
 import java.util.List;
+import java.io.File;
 import lombok.extern.slf4j.Slf4j;
 
 @Mojo(name = "crud-generator", defaultPhase = LifecyclePhase.GENERATE_SOURCES, requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME)
@@ -31,6 +32,12 @@ public class CrudGeneratorMojo extends AbstractMojo {
     @Parameter(property = "tableDefinitionFile", defaultValue = "table-definitions.json")
     private String tableDefinitionFile = "table-definitions.json";
 
+    @Parameter(defaultValue = "${project.basedir}", required = true, readonly = true)
+    private File basedir;
+
+    @Parameter(property = "templateDirectory", defaultValue = "/src/main/resources/templates/")
+    private String templateDirectory;
+
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
         try {
@@ -43,6 +50,9 @@ public class CrudGeneratorMojo extends AbstractMojo {
     }
 
     private void generateCodes() {
+        // Construct the full path to the templates directory
+        File templateDir = new File(basedir, templateDirectory);
+
         // 从 yml 读取配置
         ConfigFromYml config = ConfigFromYml.loadFromYaml(configFile);
 
@@ -51,8 +61,10 @@ public class CrudGeneratorMojo extends AbstractMojo {
             try {
                 List<TableMeta> tables = JsonTableLoader.loadFromJson(tableDefinitionFile, config);
 
+                log.info("Loaded table definitions: " + tables.size() + " tables found.");
+
                 SqlExecutor executor = new SqlExecutor(config);
-                TemplateEngine engine = new TemplateEngine(CrudGeneratorMojo.class, config);
+                TemplateEngine engine = new TemplateEngine(templateDir, config);
 
                 engine.generateBaseEntity(); // 先生成 BaseEntity
 

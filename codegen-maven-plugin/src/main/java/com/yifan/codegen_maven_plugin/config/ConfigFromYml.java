@@ -6,8 +6,10 @@ import java.util.Map;
 import org.yaml.snakeyaml.Yaml;
 
 import lombok.Data;
+import lombok.extern.slf4j.Slf4j;
 
 @Data
+@Slf4j
 public class ConfigFromYml {
     private String jdbcUrl;
     private String jdbcUsername;
@@ -67,6 +69,10 @@ public class ConfigFromYml {
             // 类型映射
             Map<String, String> typeMapping = (Map<String, String>) gen.get("type-mapping");
             cfg.javaToSqlMap.putAll(typeMapping);
+
+            log.info("配置加载成功: " + yamlFile);
+            log.info("JDBC URL: " + cfg.jdbcUrl);
+            log.info("Base Package: " + cfg.basePackage);
 
             return cfg;
         } catch (Exception e) {
