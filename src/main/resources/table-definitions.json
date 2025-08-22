@@ -1,0 +1,15 @@
+{
+ 
+  "tables": [
+    {
+      "tableName": "shore",
+      "entityName": "Shore",
+      "columns": [
+        { "javaName": "username", "javaType": "String", "comment": "用户名" },
+        { "javaName": "email", "javaType": "String", "comment": "邮箱" },
+        { "javaName": "age", "javaType": "Integer", "comment": "年龄" },
+        { "javaName": "password", "javaType": "String", "comment": "密码" }
+      ]
+    }
+  ]
+}

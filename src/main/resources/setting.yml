@@ -1,0 +1,28 @@
+generator:
+  jdbc:
+    url: jdbc:mysql://192.168.189.135:3306/learning?useSSL=false&serverTimezone=UTC
+    username: root
+    password: 123456
+    driver: com.mysql.cj.jdbc.Driver
+
+  package:
+    base: com.yifan.test
+    entity: com.yifan.test.entity
+    mapper: com.yifan.test.mapper
+    service: com.yifan.test.service
+    controller: com.yifan.test.controller
+    baseEntity: com.yifan.test.base
+
+  sql:
+    output: src/main/resources/sql
+    template: templates/sql
+
+  type-mapping:
+    String: VARCHAR(255)
+    Integer: INT
+    Long: BIGINT
+    Double: DOUBLE
+    BigDecimal: DECIMAL(18,2)
+    LocalDate: DATE
+    LocalDateTime: DATETIME
+    Boolean: TINYINT(1)
