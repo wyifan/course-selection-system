@@ -8,10 +8,14 @@ import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
 import org.apache.maven.project.MavenProject;
+
+import lombok.extern.slf4j.Slf4j;
+
 import org.apache.maven.model.Dependency;
 
 import java.util.List;
 
+@Slf4j
 @Mojo(name = "dependency-counter", defaultPhase = LifecyclePhase.COMPILE, requiresDependencyResolution = ResolutionScope.COMPILE_PLUS_RUNTIME)
 public class DependencyCounterMojo extends AbstractMojo {
 
@@ -22,6 +26,11 @@ public class DependencyCounterMojo extends AbstractMojo {
     String scope;
 
     public void execute() throws MojoExecutionException, MojoFailureException {
+
+        String projectPath = System.getProperty("user.dir");
+		log.info("当前项目路径: {}", projectPath);
+
+        log.info("Initializing DependencyCounterMojo");
         List<Dependency> dependencies = project.getDependencies();
 
         long numDependencies = dependencies.stream()
