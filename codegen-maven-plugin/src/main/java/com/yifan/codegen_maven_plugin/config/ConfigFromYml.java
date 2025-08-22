@@ -34,10 +34,10 @@ public class ConfigFromYml {
 
     // ================== 加载配置 ==================
     @SuppressWarnings("unchecked")
-    public static ConfigFromYml loadFromYaml(String yamlFile) {
-        try (InputStream input = ConfigFromYml.class.getClassLoader().getResourceAsStream(yamlFile)) {
+    public static ConfigFromYml loadFromYaml(InputStream input) {
+        try {
             if (input == null) {
-                throw new RuntimeException("配置文件未找到: " + yamlFile);
+                throw new RuntimeException("配置文件未找到: ");
             }
 
             Yaml yaml = new Yaml();
@@ -55,7 +55,7 @@ public class ConfigFromYml {
 
             // sql
             Map<String, Object> sql = (Map<String, Object>) gen.get("sql");
-            cfg.sqlOutputDir = (String) sql.get("output");      
+            cfg.sqlOutputDir = (String) sql.get("output");
 
             // 包配置
             Map<String, Object> pkg = (Map<String, Object>) gen.get("package");
@@ -70,13 +70,13 @@ public class ConfigFromYml {
             Map<String, String> typeMapping = (Map<String, String>) gen.get("type-mapping");
             cfg.javaToSqlMap.putAll(typeMapping);
 
-            log.info("配置加载成功: " + yamlFile);
+            log.info("配置加载成功: ");
             log.info("JDBC URL: " + cfg.jdbcUrl);
             log.info("Base Package: " + cfg.basePackage);
 
             return cfg;
         } catch (Exception e) {
-            throw new RuntimeException("加载配置失败: " + yamlFile, e);
+            throw new RuntimeException("加载配置失败: ", e);
         }
     }
 }

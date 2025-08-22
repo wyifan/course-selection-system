@@ -25,6 +25,8 @@ import java.io.File;
 import java.io.Writer;
 import java.io.OutputStreamWriter;
 import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.io.FileInputStream;
 import java.util.Map;
 import java.util.HashMap;
 import java.nio.charset.StandardCharsets;
@@ -58,9 +60,9 @@ public class CrudGeneratorMojo extends AbstractMojo {
 
             cfg.setDefaultEncoding("UTF-8");
 
-            ConfigFromYml config = ConfigFromYml.loadFromYaml(configFile);
+            ConfigFromYml config = ConfigFromYml.loadFromYaml(getSettingYml(configFile));
 
-            List<TableMeta> tables = JsonTableLoader.loadFromJson("table-definitions.json", config);
+            List<TableMeta> tables = JsonTableLoader.loadFromJson(getSettingYml(tableDefinitionFile), config);
 
             SqlExecutor executor = new SqlExecutor(config);
 
@@ -81,6 +83,23 @@ public class CrudGeneratorMojo extends AbstractMojo {
         } catch (Exception e) {
             throw new MojoExecutionException("Error executing CRUD generator", e);
         }
+    }
+
+    private InputStream getSettingYml(String configFile) throws IOException {
+
+        InputStream inputStream = null;
+        try {
+            File file = new File(project.getBuild().getOutputDirectory(), configFile);
+            if (!file.exists()) {
+                inputStream = this.getClass().getClassLoader().getResourceAsStream(configFile);
+            } else {
+                inputStream = new FileInputStream(configFile);
+            }
+        } catch (IOException e) {
+            getLog().error("配置文件加载失败: " + configFile, e);
+            throw e;
+        }
+        return inputStream;
     }
 
     /**

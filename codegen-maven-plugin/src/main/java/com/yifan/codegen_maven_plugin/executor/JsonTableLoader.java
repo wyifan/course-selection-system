@@ -12,16 +12,15 @@ import java.io.File;
 import java.io.InputStream;
 
 public class JsonTableLoader {
-    public static List<TableMeta> loadFromJson(String jsonFilePath, ConfigFromYml config) throws Exception {
+    public static List<TableMeta> loadFromJson(InputStream input, ConfigFromYml config) throws Exception {
         ObjectMapper mapper = new ObjectMapper();
         JsonWrapper wrapper;
-        ClassLoader cl = Thread.currentThread().getContextClassLoader();
-        try (InputStream is = cl.getResourceAsStream(jsonFilePath)) {
-            if (is == null) {
-                throw new RuntimeException("找不到配置文件 table-definitions.json");
-            }
-            wrapper = mapper.readValue(is, JsonWrapper.class);
+
+        if (input == null) {
+            throw new RuntimeException("找不到配置文件 table-definitions.json");
         }
+        wrapper = mapper.readValue(input, JsonWrapper.class);
+
         // JsonWrapper wrapper = mapper.readValue(new File(jsonFilePath),
         // JsonWrapper.class);
 
