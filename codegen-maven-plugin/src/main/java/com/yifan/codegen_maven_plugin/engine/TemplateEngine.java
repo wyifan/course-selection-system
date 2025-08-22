@@ -2,6 +2,8 @@ package com.yifan.codegen_maven_plugin.engine;
 
 import freemarker.template.Configuration;
 import freemarker.template.Template;
+import freemarker.template.TemplateExceptionHandler;
+import freemarker.cache.ClassTemplateLoader;
 
 import java.io.File;
 import java.io.Writer;
@@ -27,7 +29,11 @@ public class TemplateEngine {
 
     public TemplateEngine(ConfigFromYml config) throws Exception {
         cfg = new Configuration(Configuration.VERSION_2_3_33);
-        cfg.setClassLoaderForTemplateLoading(getClass().getClassLoader(), "templates");
+        // cfg.setClassLoaderForTemplateLoading(getClass().getClassLoader(), "templates");
+        ClassTemplateLoader templateLoader = new ClassTemplateLoader(getClass(), "/templates");
+        cfg.setTemplateLoader(templateLoader);
+
+        cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
         cfg.setDefaultEncoding("UTF-8");
 
         this.config = config;
