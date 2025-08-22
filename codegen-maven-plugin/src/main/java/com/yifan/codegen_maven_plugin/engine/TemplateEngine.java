@@ -4,6 +4,7 @@ import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateExceptionHandler;
 import freemarker.cache.FileTemplateLoader;
+import freemarker.cache.ClassTemplateLoader;
 
 import java.io.File;
 import java.io.Writer;
@@ -29,11 +30,13 @@ public class TemplateEngine {
 
     public TemplateEngine(ConfigFromYml config) throws Exception {
         cfg = new Configuration(Configuration.VERSION_2_3_33);
-
-        // 使用当前线程的类加载器，并从类路径的根目录开始加载
-        cfg.setClassLoaderForTemplateLoading(Thread.currentThread().getContextClassLoader(), "templates");
-
-        log.info("Freemarker is attempting to load templates from path: templates/");
+        cfg.setClassLoaderForTemplateLoading(
+                this.getClass().getClassLoader(),
+                "templates");
+        // cfg.setTemplateLoader(new
+        // ClassTemplateLoader(this.getClass().getClassLoader(), "/templates"));
+        // cfg.setClassForTemplateLoading(this.getClass(), "/templates");
+        log.info("Freemarker is attempting to load templates from classpath root: /templates");
 
         cfg.setDefaultEncoding("UTF-8");
 
