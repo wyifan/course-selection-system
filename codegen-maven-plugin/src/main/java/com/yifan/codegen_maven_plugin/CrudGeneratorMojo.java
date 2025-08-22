@@ -4,12 +4,12 @@ import com.yifan.codegen_maven_plugin.config.ConfigFromYml;
 import com.yifan.codegen_maven_plugin.executor.SqlExecutor;
 import com.yifan.codegen_maven_plugin.entity.TableMeta;
 import com.yifan.codegen_maven_plugin.executor.JsonTableLoader;
-import com.yifan.codegen_maven_plugin.engine.TemplateEngine;  
+import com.yifan.codegen_maven_plugin.engine.TemplateEngine;
 
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
-import org.apache.maven.plugins.annotations.LifecyclePhase; 
+import org.apache.maven.plugins.annotations.LifecyclePhase;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.plugins.annotations.ResolutionScope;
@@ -52,7 +52,7 @@ public class CrudGeneratorMojo extends AbstractMojo {
                 List<TableMeta> tables = JsonTableLoader.loadFromJson(tableDefinitionFile, config);
 
                 SqlExecutor executor = new SqlExecutor(config);
-                TemplateEngine engine = new TemplateEngine(config);
+                TemplateEngine engine = new TemplateEngine(CrudGeneratorMojo.class, config);
 
                 engine.generateBaseEntity(); // 先生成 BaseEntity
 

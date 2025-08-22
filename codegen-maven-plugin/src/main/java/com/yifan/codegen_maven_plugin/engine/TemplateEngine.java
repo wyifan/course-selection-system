@@ -27,10 +27,11 @@ public class TemplateEngine {
     private final Configuration cfg;
     private final ConfigFromYml config;
 
-    public TemplateEngine(ConfigFromYml config) throws Exception {
+    public TemplateEngine(Class<?> loadingClass, ConfigFromYml config) throws Exception {
         cfg = new Configuration(Configuration.VERSION_2_3_33);
-        // cfg.setClassLoaderForTemplateLoading(getClass().getClassLoader(), "templates");
-        ClassTemplateLoader templateLoader = new ClassTemplateLoader(getClass(), "/templates");
+        // cfg.setClassLoaderForTemplateLoading(getClass().getClassLoader(),
+        // "templates");
+        ClassTemplateLoader templateLoader = new ClassTemplateLoader(loadingClass, "/templates");
         cfg.setTemplateLoader(templateLoader);
 
         cfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
