@@ -19,7 +19,7 @@
 * **✍️ 全方位代码生成**
     * 基于 **FreeMarker** 模板引擎，可轻松定制生成的代码风格。
     * 一键生成包括 **Entity**, **DTO**, **Service (Interface)**, **ServiceImpl**, **Controller**, **Mapper (Interface)**, 和 **Mapper.xml** 在内的全套 CRUD 代码。
-    * 自动生成通用的 `BaseEntity`，包含ID、创建/更新信息、逻辑删除和版本号等公共字段。
+    * **可选的基类继承**：可为每个表单独配置是否继承通用的 `BaseEntity`。
 
 * **🔄 数据库 Schema 同步**
     * **SQL 脚本生成**：根据 `table-definitions.json` 的定义，自动生成 `CREATE TABLE` 或 `ALTER TABLE` 语句，并保存到 `src/main/resources/sql/schema.sql`。
@@ -42,7 +42,7 @@
 首先，您需要将本插件安装到您本地的 Maven 仓库。
 
 ```bash
-# 进入插件项目根目录 (crud-generator-plugin)
+# 进入插件项目根目录 (codegen-maven-plugin)
 mvn clean install
 ```
 
@@ -54,9 +54,9 @@ mvn clean install
 <build>
     <plugins>
         <plugin>
-            <groupId>com.yifan.codegen</groupId>
-            <artifactId>crud-generator-plugin</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <groupId>com.yifan</groupId>
+            <artifactId>codegen-maven-plugin</artifactId>
+            <version>0.0.1-SNAPSHOT</version>
         </plugin>
     </plugins>
 </build>
@@ -79,7 +79,7 @@ generator:
   
   # 包名配置 (basePackage 会被 pom.xml 自动覆盖)
   package:
-    basePackage: com.yourcompany.yourproject # 建议保留，作为 pom.xml 读取失败时的备用
+    basePackage: com.yifan.yourproject # 建议保留，作为 pom.xml 读取失败时的备用
     entity: model.entity
     dto: model.dto
     mapper: repository
@@ -119,7 +119,7 @@ generator:
     {
       "tableName": "product",
       "entityName": "Product",
-      "useBaseEntity": true,
+      "useBaseEntity": false,
       "columns": [
         { "javaName": "productName", "javaType": "String", "comment": "产品名称" },
         { "javaName": "price", "javaType": "BigDecimal", "comment": "价格" }
@@ -134,7 +134,8 @@ generator:
 打开终端，在**目标项目**的根目录下执行以下命令。
 
 ```bash
-mvn com.example.codegen:crud-generator-plugin:generate
+# 推荐使用简洁命令
+mvn codegen:generate-crud
 ```
 
 执行后，插件会自动完成 **POM 初始化**、**`application.yml` 配置**、**代码生成** 和 **`schema.sql` 生成** 的所有工作。
@@ -143,11 +144,38 @@ mvn com.example.codegen:crud-generator-plugin:generate
 
 ## 执行命令详解
 
+### 配置命令前缀 (goalPrefix)
+
+为了使用更简洁的命令（如 `mvn codegen:generate-crud`），您需要在**插件项目**的 `pom.xml` 中配置 `goalPrefix`。
+
+```xml
+<!-- 在插件项目的 pom.xml 中 -->
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-plugin-plugin</artifactId>
+            <version>3.13.1</version>
+            <configuration>
+                <!-- 这个前缀就是未来执行命令时使用的短名称 -->
+                <goalPrefix>codegen</goalPrefix>
+            </configuration>
+        </plugin>
+    </plugins>
+</build>
+```
+
+### 执行命令
+
 * **标准执行（推荐）**:
   此命令会执行所有代码生成和文件配置任务，并生成 `schema.sql` 脚本，但**不会**自动执行 SQL。
 
   ```bash
-  mvn com.yifan.codegen:crud-generator-plugin:generate
+  # 简洁命令 (需要配置 goalPrefix)
+  mvn codegen:generate-crud
+
+  # 完整命令 (无需配置 goalPrefix)
+  mvn com.yifan:codegen-maven-plugin:generate-crud
   ```
 
 * **执行 SQL 同步**:
@@ -156,7 +184,11 @@ mvn com.example.codegen:crud-generator-plugin:generate
   > **警告**: 此操作会直接修改您的数据库结构，请在开发和测试环境中谨慎使用！
 
   ```bash
-  mvn com.yifan.codegen:crud-generator-plugin:generate -DexecuteSql=true
+  # 简洁命令
+  mvn codegen:generate-crud -DexecuteSql=true
+
+  # 完整命令
+  mvn com.yifan:codegen-maven-plugin:generate-crud -DexecuteSql=true
   ```
 
 ---
