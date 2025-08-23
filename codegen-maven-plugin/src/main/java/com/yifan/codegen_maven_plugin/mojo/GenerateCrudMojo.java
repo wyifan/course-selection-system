@@ -26,6 +26,29 @@ import java.util.stream.Collectors;
 
 @Mojo(name = "generate-crud")
 public class GenerateCrudMojo extends AbstractMojo {
+    
+    // [MODIFIED] 提取所有字符串为常量
+    private static final String SETTINGS_FILE = "setting.yml";
+    private static final String TABLE_DEFINITIONS_FILE = "table-definitions.json";
+    private static final String APPLICATION_YML_FILE = "application.yml";
+    private static final String SCHEMA_SQL_FILE = "sql/schema.sql";
+    private static final String TEMPLATES_DIR = "/templates";
+    private static final String LOG_PREFIX = "crud-generator-plugin: ";
+
+    private static final String PACKAGE_KEY_BASE = "basePackage";
+    private static final String PACKAGE_KEY_ENTITY = "entity";
+    private static final String PACKAGE_KEY_BASE_ENTITY = "baseEntity";
+    private static final String PACKAGE_KEY_DTO = "dto";
+    private static final String PACKAGE_KEY_SERVICE = "service";
+    private static final String PACKAGE_KEY_SERVICE_IMPL = "serviceImpl";
+    private static final String PACKAGE_KEY_CONTROLLER = "controller";
+    private static final String PACKAGE_KEY_MAPPER = "mapper";
+
+    private static final Set<String> PROTECTED_COLUMNS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+        "id", "created_by", "created_by_name", "create_time", 
+        "updated_by", "updated_by_name", "updated_time", "is_deleted", "version"
+    )));
+
     @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
 
@@ -34,65 +57,141 @@ public class GenerateCrudMojo extends AbstractMojo {
 
     private Configuration freemarkerCfg;
 
+    private static class DependencyInfo {
+        final String groupId;
+        final String artifactId;
+        final String version;
+        final String scope;
+        DependencyInfo(String groupId, String artifactId, String version, String scope) {
+            this.groupId = groupId; this.artifactId = artifactId; this.version = version; this.scope = scope;
+        }
+        String getManagementId() { return groupId + ":" + artifactId; }
+    }
+
     @Override
     public void execute() throws MojoExecutionException {
         try {
             initFreeMarker();
-            Map<String, Object> settings = loadConfig("setting.yml", true);
-            Map<String, Object> tableDefinitions = loadConfig("table-definitions.json", false);
+            Map<String, Object> settings = loadConfig(SETTINGS_FILE, true);
+            Map<String, Object> tableDefinitions = loadConfig(TABLE_DEFINITIONS_FILE, false);
             Map<String, Object> generatorConfig = (Map<String, Object>) settings.get("generator");
 
-            // [MODIFIED] Centralized POM and application.yml management
             manageProjectConfiguration(generatorConfig);
 
             Map<String, Object> rootDataModel = new HashMap<>();
             rootDataModel.put("generator", generatorConfig);
 
-            generateBaseFiles(rootDataModel, generatorConfig);
-            generateCodeForTables(rootDataModel, tableDefinitions, generatorConfig);
-            manageDatabaseSchema(generatorConfig, tableDefinitions);
+            generateCode(rootDataModel, tableDefinitions, generatorConfig);
+            
+            String sqlScript = generateAndCompareSchema(generatorConfig, tableDefinitions);
+            saveSqlScript(sqlScript);
+            
+            if (executeSql) {
+                executeSqlScript(sqlScript, generatorConfig);
+            }
 
-            getLog().info("✅ 所有任务执行成功!");
+            getLog().info(LOG_PREFIX + "✅ 所有任务执行成功!");
 
         } catch (Exception e) {
-            getLog().error("代码生成失败", e);
+            getLog().error(LOG_PREFIX + "代码生成失败", e);
             throw new MojoExecutionException("代码生成过程中发生错误", e);
         }
     }
-
-    // [NEW] Central method to manage all project configurations
+    
     private void manageProjectConfiguration(Map<String, Object> generatorConfig) throws Exception {
-        getLog().info("--- 正在初始化项目配置 ---");
+        getLog().info(LOG_PREFIX + "--- 正在初始化项目配置 ---");
         File pomFile = project.getFile();
         MavenXpp3Reader reader = new MavenXpp3Reader();
         Model model;
-        try (FileReader fileReader = new FileReader(pomFile)) {
+        try (FileReader fileReader = new FileReader(pomFile, StandardCharsets.UTF_8)) {
             model = reader.read(fileReader);
         }
 
-        boolean hasParent = model.getParent() != null
-                && "spring-boot-starter-parent".equals(model.getParent().getArtifactId());
+        boolean hasParent = model.getParent() != null && "spring-boot-starter-parent".equals(model.getParent().getArtifactId());
         boolean pomModified = false;
 
         pomModified |= manageProperties(model, hasParent);
         pomModified |= manageDependencies(model, hasParent);
         pomModified |= manageBuild(model, hasParent);
-
+        
         if (pomModified) {
             MavenXpp3Writer writer = new MavenXpp3Writer();
-            try (FileWriter fileWriter = new FileWriter(pomFile)) {
+            try (FileWriter fileWriter = new FileWriter(pomFile, StandardCharsets.UTF_8)) {
                 writer.write(fileWriter, model);
-                getLog().info("pom.xml 已更新。");
+                getLog().info(LOG_PREFIX + "pom.xml 已更新。");
             }
         } else {
-            getLog().info("pom.xml 配置完整，无需修改。");
+            getLog().info(LOG_PREFIX + "pom.xml 配置完整，无需修改。");
         }
 
         overrideBasePackageFromPom(generatorConfig);
         manageApplicationYml(generatorConfig);
     }
+    
+    private Map<String, String> getRequiredProperties(boolean hasParent) {
+        Map<String, String> props = new LinkedHashMap<>();
+        props.put("java.version", "17");
+        props.put("project.build.sourceEncoding", "UTF-8");
 
-    // [MODIFIED] Updated to handle versions based on parent POM
+        if (!hasParent) {
+            getLog().info(LOG_PREFIX + "未找到 Spring Boot 父POM，将添加版本属性。");
+            props.put("spring-boot.version", "3.2.5"); 
+            props.put("mybatis-plus.version", "3.5.5");
+            props.put("mysql.version", "8.3.0");
+            props.put("lombok.version", "1.18.32");
+        }
+        return props;
+    }
+
+    private boolean manageProperties(Model model, boolean hasParent) {
+        boolean modified = false;
+        Properties properties = model.getProperties();
+        if (properties == null) {
+            properties = new Properties();
+            model.setProperties(properties);
+        }
+        
+        Map<String, String> requiredProps = getRequiredProperties(hasParent);
+        for (Map.Entry<String, String> entry : requiredProps.entrySet()) {
+            if (!entry.getValue().equals(properties.getProperty(entry.getKey()))) {
+                properties.setProperty(entry.getKey(), entry.getValue());
+                modified = true;
+            }
+        }
+        return modified;
+    }
+
+    private List<DependencyInfo> getRequiredDependencies(boolean hasParent) {
+        List<DependencyInfo> deps = new ArrayList<>();
+        deps.add(new DependencyInfo("org.springframework.boot", "spring-boot-starter-web", hasParent ? null : "${spring-boot.version}", null));
+        deps.add(new DependencyInfo("com.baomidou", "mybatis-plus-spring-boot3-starter", hasParent ? "3.5.5" : "${mybatis-plus.version}", null));
+        deps.add(new DependencyInfo("com.mysql", "mysql-connector-j", hasParent ? null : "${mysql.version}", null));
+        deps.add(new DependencyInfo("org.projectlombok", "lombok", hasParent ? null : "${lombok.version}", "provided"));
+        return deps;
+    }
+
+    private boolean manageDependencies(Model model, boolean hasParent) {
+        List<DependencyInfo> requiredDeps = getRequiredDependencies(hasParent);
+        Set<String> existingDeps = model.getDependencies().stream()
+                .map(d -> d.getGroupId() + ":" + d.getArtifactId())
+                .collect(Collectors.toSet());
+        
+        boolean modified = false;
+        for (DependencyInfo depInfo : requiredDeps) {
+            if (!existingDeps.contains(depInfo.getManagementId())) {
+                modified = true;
+                Dependency dep = new Dependency();
+                dep.setGroupId(depInfo.groupId);
+                dep.setArtifactId(depInfo.artifactId);
+                if (depInfo.version != null) dep.setVersion(depInfo.version);
+                if (depInfo.scope != null) dep.setScope(depInfo.scope);
+                model.addDependency(dep);
+                getLog().info(LOG_PREFIX + "已添加缺失的依赖: " + depInfo.getManagementId());
+            }
+        }
+        return modified;
+    }
+    
     private boolean manageBuild(Model model, boolean hasParent) {
         boolean modified = false;
         Build build = model.getBuild();
@@ -101,17 +200,11 @@ public class GenerateCrudMojo extends AbstractMojo {
             model.setBuild(build);
         }
 
-        // Maven Compiler Plugin
-        Optional<Plugin> compilerPluginOpt = build.getPlugins().stream()
-                .filter(p -> "org.apache.maven.plugins".equals(p.getGroupId())
-                        && "maven-compiler-plugin".equals(p.getArtifactId()))
-                .findFirst();
-
-        if (!compilerPluginOpt.isPresent()) {
+        if (build.getPlugins().stream().noneMatch(p -> "maven-compiler-plugin".equals(p.getArtifactId()))) {
             Plugin compiler = new Plugin();
             compiler.setGroupId("org.apache.maven.plugins");
             compiler.setArtifactId("maven-compiler-plugin");
-            compiler.setVersion("3.11.0"); // A modern, stable version
+            compiler.setVersion("3.11.0");
             Xpp3Dom config = new Xpp3Dom("configuration");
             Xpp3Dom source = new Xpp3Dom("source");
             source.setValue("${java.version}");
@@ -122,24 +215,14 @@ public class GenerateCrudMojo extends AbstractMojo {
             compiler.setConfiguration(config);
             build.addPlugin(compiler);
             modified = true;
-            getLog().info("已添加 maven-compiler-plugin 配置。");
+            getLog().info(LOG_PREFIX + "已添加 maven-compiler-plugin 配置。");
         }
 
-        // Spring Boot Maven Plugin
-        Optional<Plugin> springBootPluginOpt = build.getPlugins().stream()
-                .filter(p -> "org.springframework.boot".equals(p.getGroupId())
-                        && "spring-boot-maven-plugin".equals(p.getArtifactId()))
-                .findFirst();
-
-        if (!springBootPluginOpt.isPresent()) {
+        if (build.getPlugins().stream().noneMatch(p -> "spring-boot-maven-plugin".equals(p.getArtifactId()))) {
             Plugin springBoot = new Plugin();
             springBoot.setGroupId("org.springframework.boot");
             springBoot.setArtifactId("spring-boot-maven-plugin");
-
-            if (!hasParent) {
-                springBoot.setVersion(model.getProperties().getProperty("spring-boot.version"));
-            }
-
+            if (!hasParent) springBoot.setVersion(model.getProperties().getProperty("spring-boot.version"));
             Xpp3Dom config = new Xpp3Dom("configuration");
             Xpp3Dom excludes = new Xpp3Dom("excludes");
             Xpp3Dom exclude = new Xpp3Dom("exclude");
@@ -154,130 +237,29 @@ public class GenerateCrudMojo extends AbstractMojo {
             springBoot.setConfiguration(config);
             build.addPlugin(springBoot);
             modified = true;
-            getLog().info("已添加 spring-boot-maven-plugin 配置 (含 lombok 排除)。");
-        }
-
-        return modified;
-    }
-
-    // [NEW] Manages the <properties> section of the pom.xml
-    private boolean manageProperties(Model model, boolean hasParent) {
-        boolean modified = false;
-        Properties properties = model.getProperties();
-        if (properties == null) {
-            properties = new Properties();
-            model.setProperties(properties);
-        }
-
-        if (!"17".equals(properties.getProperty("java.version"))) {
-            properties.setProperty("java.version", "17");
-            modified = true;
-        }
-        if (!"UTF-8".equals(properties.getProperty("project.build.sourceEncoding"))) {
-            properties.setProperty("project.build.sourceEncoding", "UTF-8");
-            modified = true;
-        }
-
-        if (!hasParent) {
-            getLog().info("未找到 Spring Boot 父POM，将添加版本属性。");
-            Map<String, String> versionProps = new LinkedHashMap<>();
-            // Note: Spring Boot 3.5.4 is not a valid version. Using a recent, stable 3.x
-            // version.
-            versionProps.put("spring-boot.version", "3.2.5");
-            versionProps.put("mybatis-plus.version", "3.5.5");
-            versionProps.put("mysql.version", "8.3.0"); // Note: 9.3.0 is not a valid version.
-            versionProps.put("lombok.version", "1.18.32");
-
-            for (Map.Entry<String, String> entry : versionProps.entrySet()) {
-                if (!entry.getValue().equals(properties.getProperty(entry.getKey()))) {
-                    properties.setProperty(entry.getKey(), entry.getValue());
-                    modified = true;
-                }
-            }
+            getLog().info(LOG_PREFIX + "已添加 spring-boot-maven-plugin 配置 (含 lombok 排除)。");
         }
         return modified;
     }
 
-    // [MODIFIED] Updated to handle versions based on parent POM
-    private boolean manageDependencies(Model model, boolean hasParent) {
-        Map<String, String> requiredDeps = new LinkedHashMap<>();
-        requiredDeps.put("org.springframework.boot:spring-boot-starter-web",
-                hasParent ? null : "${spring-boot.version}");
-        // Note: mybatis-plus-spring-boot3-starter is the correct artifactId for Spring
-        // Boot 3
-        requiredDeps.put("com.baomidou:mybatis-plus-spring-boot3-starter",
-                hasParent ? "3.5.5" : "${mybatis-plus.version}");
-        requiredDeps.put("com.mysql:mysql-connector-j", hasParent ? null : "${mysql.version}");
-        requiredDeps.put("org.projectlombok:lombok", hasParent ? null : "${lombok.version}");
-
-        Set<String> existingDeps = model.getDependencies().stream()
-                .map(d -> d.getGroupId() + ":" + d.getArtifactId())
-                .collect(Collectors.toSet());
-
-        boolean modified = false;
-        for (Map.Entry<String, String> entry : requiredDeps.entrySet()) {
-            String ga = entry.getKey();
-            if (!existingDeps.contains(ga)) {
-                modified = true;
-                String[] parts = ga.split(":");
-                Dependency dep = new Dependency();
-                dep.setGroupId(parts[0]);
-                dep.setArtifactId(parts[1]);
-
-                if (entry.getValue() != null) {
-                    dep.setVersion(entry.getValue());
-                }
-
-                if ("lombok".equals(dep.getArtifactId())) {
-                    dep.setScope("provided");
-                }
-
-                model.addDependency(dep);
-                getLog().info("已添加缺失的依赖: " + ga);
-            }
-        }
-        return modified;
-    }
-
-    private boolean isDependencyManaged(Model model, Dependency dep) {
-        if (model.getDependencyManagement() == null) {
-            return false;
-        }
-        return model.getDependencyManagement().getDependencies().stream()
-                .anyMatch(managedDep -> managedDep.getGroupId().equals(dep.getGroupId()) &&
-                        managedDep.getArtifactId().equals(dep.getArtifactId()));
-    }
-
-    /**
-     * [NEW] 新增方法：从POM中读取groupId和artifactId来覆盖basePackage
-     */
     private void overrideBasePackageFromPom(Map<String, Object> generatorConfig) {
         String groupId = project.getGroupId();
         String artifactId = project.getArtifactId();
-
         if (groupId == null || artifactId == null) {
-            getLog().warn("无法从 pom.xml 中获取 groupId 或 artifactId，将使用 setting.yml 中的配置。");
+            getLog().warn(LOG_PREFIX + "无法从 pom.xml 中获取 groupId 或 artifactId，将使用 setting.yml 中的配置。");
             return;
         }
-
-        // 清理 artifactId 中的 '-' 符号
-        String sanitizedArtifactId = artifactId.replace("-", "_");
+        String sanitizedArtifactId = artifactId.replace("-", "");
         String pomBasePackage = groupId + "." + sanitizedArtifactId;
-
-        getLog().info("从 pom.xml 推断出 basePackage: " + pomBasePackage + "，将覆盖 setting.yml 中的配置。");
-
-        // 获取或创建 package 配置 map
-        Map<String, Object> packageConfig = (Map<String, Object>) generatorConfig.computeIfAbsent("package",
-                k -> new HashMap<>());
-
-        // 覆盖 basePackage 的值
-        packageConfig.put("basePackage", pomBasePackage);
+        getLog().info(LOG_PREFIX + "从 pom.xml 推断出 basePackage: " + pomBasePackage + "，将覆盖 setting.yml 中的配置。");
+        Map<String, Object> packageConfig = (Map<String, Object>) generatorConfig.computeIfAbsent("package", k -> new HashMap<>());
+        packageConfig.put(PACKAGE_KEY_BASE, pomBasePackage);
     }
 
     private void initFreeMarker() {
         freemarkerCfg = new Configuration(Configuration.VERSION_2_3_31);
-        freemarkerCfg.setClassForTemplateLoading(this.getClass(), "/templates");
-        freemarkerCfg.setDefaultEncoding("UTF-8");
+        freemarkerCfg.setClassForTemplateLoading(this.getClass(), TEMPLATES_DIR);
+        freemarkerCfg.setDefaultEncoding(StandardCharsets.UTF_8.name());
         freemarkerCfg.setTemplateExceptionHandler(TemplateExceptionHandler.RETHROW_HANDLER);
     }
 
@@ -285,261 +267,246 @@ public class GenerateCrudMojo extends AbstractMojo {
         File userFile = new File(project.getBasedir(), "src/main/resources/" + fileName);
         InputStream inputStream;
         if (userFile.exists() && userFile.isFile()) {
-            getLog().info("使用项目本地配置文件: " + userFile.getAbsolutePath());
+            getLog().info(LOG_PREFIX + "使用项目本地配置文件: " + userFile.getAbsolutePath());
             inputStream = new FileInputStream(userFile);
         } else {
-            getLog().info("未找到项目本地配置文件 '" + fileName + "', 使用插件默认配置。");
+            getLog().info(LOG_PREFIX + "未找到项目本地配置文件 '" + fileName + "', 使用插件默认配置。");
             inputStream = getClass().getClassLoader().getResourceAsStream(fileName);
-            if (inputStream == null)
-                throw new MojoExecutionException("插件默认配置文件 '" + fileName + "' 丢失!");
+            if (inputStream == null) throw new MojoExecutionException("插件默认配置文件 '" + fileName + "' 丢失!");
         }
         ObjectMapper mapper = isYaml ? new ObjectMapper(new YAMLFactory()) : new ObjectMapper();
-        try (InputStream in = inputStream) {
-            return mapper.readValue(in, Map.class);
+        try (Reader reader = new InputStreamReader(inputStream, StandardCharsets.UTF_8)) {
+            return mapper.readValue(reader, Map.class);
         }
     }
 
-    private void generateBaseFiles(Map<String, Object> dataModel, Map<String, Object> generatorConfig)
-            throws Exception {
-        getLog().info("--- 正在生成基础文件 ---");
-        processTemplate("baseEntity.ftl", dataModel,
-                getJavaOutputPath(generatorConfig, "baseEntity", "BaseEntity.java"));
+    private void generateCode(Map<String, Object> rootDataModel, Map<String, Object> tableDefinitions, Map<String, Object> generatorConfig) throws Exception {
+        generateBaseFiles(rootDataModel, generatorConfig);
+        generateCodeForTables(rootDataModel, tableDefinitions, generatorConfig);
     }
 
-    private void generateCodeForTables(Map<String, Object> rootDataModel, Map<String, Object> tableDefinitions,
-            Map<String, Object> generatorConfig) throws Exception {
-        getLog().info("--- 正在为表定义生成代码 ---");
+    private void generateBaseFiles(Map<String, Object> dataModel, Map<String, Object> generatorConfig) throws Exception {
+        getLog().info(LOG_PREFIX + "--- 正在生成基础文件 ---");
+        processTemplate("baseEntity.ftl", dataModel, getJavaOutputPath(generatorConfig, PACKAGE_KEY_BASE_ENTITY, "BaseEntity.java"));
+    }
+
+    private void generateCodeForTables(Map<String, Object> rootDataModel, Map<String, Object> tableDefinitions, Map<String, Object> generatorConfig) throws Exception {
+        getLog().info(LOG_PREFIX + "--- 正在为表定义生成代码 ---");
         List<Map<String, Object>> tables = (List<Map<String, Object>>) tableDefinitions.get("tables");
         if (tables == null || tables.isEmpty()) {
-            getLog().warn("table-definitions.json 中没有找到任何表格定义，跳过。");
+            getLog().warn(LOG_PREFIX + "table-definitions.json 中没有找到任何表格定义，跳过。");
             return;
         }
         for (Map<String, Object> table : tables) {
-            getLog().info("正在处理表: " + table.get("tableName"));
+            getLog().info(LOG_PREFIX + "正在处理表: " + table.get("tableName"));
             rootDataModel.put("table", table);
             generateTableSpecificFiles(rootDataModel, generatorConfig);
         }
     }
 
-    private void generateTableSpecificFiles(Map<String, Object> dataModel, Map<String, Object> generatorConfig)
-            throws Exception {
+    private void generateTableSpecificFiles(Map<String, Object> dataModel, Map<String, Object> generatorConfig) throws Exception {
         String entityName = (String) ((Map<String, Object>) dataModel.get("table")).get("entityName");
-        processTemplate("dto.ftl", dataModel, getJavaOutputPath(generatorConfig, "dto", entityName + "DTO.java"));
-        processTemplate("entity.ftl", dataModel, getJavaOutputPath(generatorConfig, "entity", entityName + ".java"));
-        processTemplate("service.ftl", dataModel,
-                getJavaOutputPath(generatorConfig, "service", "I" + entityName + "Service.java"));
-        processTemplate("serviceImpl.ftl", dataModel,
-                getJavaOutputPath(generatorConfig, "serviceImpl", entityName + "ServiceImpl.java"));
-        processTemplate("controller.ftl", dataModel,
-                getJavaOutputPath(generatorConfig, "controller", entityName + "Controller.java"));
-        processTemplate("mapper.ftl", dataModel,
-                getJavaOutputPath(generatorConfig, "mapper", entityName + "Mapper.java"));
+        processTemplate("dto.ftl", dataModel, getJavaOutputPath(generatorConfig, PACKAGE_KEY_DTO, entityName + "DTO.java"));
+        processTemplate("entity.ftl", dataModel, getJavaOutputPath(generatorConfig, PACKAGE_KEY_ENTITY, entityName + ".java"));
+        processTemplate("service.ftl", dataModel, getJavaOutputPath(generatorConfig, PACKAGE_KEY_SERVICE, "I" + entityName + "Service.java"));
+        processTemplate("serviceImpl.ftl", dataModel, getJavaOutputPath(generatorConfig, PACKAGE_KEY_SERVICE_IMPL, entityName + "ServiceImpl.java"));
+        processTemplate("controller.ftl", dataModel, getJavaOutputPath(generatorConfig, PACKAGE_KEY_CONTROLLER, entityName + "Controller.java"));
+        processTemplate("mapper.ftl", dataModel, getJavaOutputPath(generatorConfig, PACKAGE_KEY_MAPPER, entityName + "Mapper.java"));
         processTemplate("mapperxml.ftl", dataModel, getResourceOutputPath("mapper", entityName + "Mapper.xml"));
     }
 
-    // [MODIFIED] 扩展此方法以包含数据库连接配置
     private void manageApplicationYml(Map<String, Object> generatorConfig) throws Exception {
-        getLog().info("--- 正在检查和更新 application.yml ---");
-        File ymlFile = new File(project.getBasedir(), "src/main/resources/application.yml");
+        getLog().info(LOG_PREFIX + "--- 正在检查和更新 application.yml ---");
+        File ymlFile = new File(project.getBasedir(), "src/main/resources/" + APPLICATION_YML_FILE);
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
         Map<String, Object> appConfig = ymlFile.exists() ? mapper.readValue(ymlFile, Map.class) : new LinkedHashMap<>();
+        if (appConfig == null) appConfig = new LinkedHashMap<>();
         boolean isModified = false;
 
-        // 1. 配置 Mybatis Plus
-        Map<String, Object> mybatisPlus = (Map<String, Object>) appConfig.computeIfAbsent("mybatis-plus",
-                k -> new LinkedHashMap<>());
+        Map<String, Object> mybatisPlus = (Map<String, Object>) appConfig.computeIfAbsent("mybatis-plus", k -> new LinkedHashMap<>());
         String expectedLocation = "classpath*:/mapper/**/*.xml";
         if (!expectedLocation.equals(mybatisPlus.get("mapper-locations"))) {
             mybatisPlus.put("mapper-locations", expectedLocation);
             isModified = true;
-            getLog().info("application.yml: 已添加 mybatis-plus.mapper-locations 配置。");
+            getLog().info(LOG_PREFIX + "application.yml: 已添加 mybatis-plus.mapper-locations 配置。");
         }
 
-        // 2. 配置数据源
-        Map<String, Object> spring = (Map<String, Object>) appConfig.computeIfAbsent("spring",
-                k -> new LinkedHashMap<>());
-        Map<String, Object> datasource = (Map<String, Object>) spring.computeIfAbsent("datasource",
-                k -> new LinkedHashMap<>());
+        Map<String, Object> spring = (Map<String, Object>) appConfig.computeIfAbsent("spring", k -> new LinkedHashMap<>());
+        Map<String, Object> datasource = (Map<String, Object>) spring.computeIfAbsent("datasource", k -> new LinkedHashMap<>());
         Map<String, String> jdbcConfig = (Map<String, String>) generatorConfig.get("jdbc");
-
-        if (!jdbcConfig.get("url").equals(datasource.get("url")) ||
-                !jdbcConfig.get("username").equals(datasource.get("username")) ||
-                !String.valueOf(jdbcConfig.get("password")).equals(String.valueOf(datasource.get("password"))) ||
-                !jdbcConfig.get("driver").equals(datasource.get("driver-class-name"))) {
-
+        
+        if (!Objects.equals(jdbcConfig.get("url"), datasource.get("url")) ||
+            !Objects.equals(jdbcConfig.get("username"), datasource.get("username")) ||
+            !Objects.equals(jdbcConfig.get("password"), datasource.get("password")) ||
+            !Objects.equals(jdbcConfig.get("driver"), datasource.get("driver-class-name"))) {
+            
             datasource.put("url", jdbcConfig.get("url"));
             datasource.put("username", jdbcConfig.get("username"));
             datasource.put("password", jdbcConfig.get("password"));
             datasource.put("driver-class-name", jdbcConfig.get("driver"));
             isModified = true;
-            getLog().info("application.yml: 已更新 spring.datasource 配置。");
+            getLog().info(LOG_PREFIX + "application.yml: 已更新 spring.datasource 配置。");
         }
 
         if (isModified) {
             mapper.writeValue(ymlFile, appConfig);
-            getLog().info("application.yml 已保存。");
+            getLog().info(LOG_PREFIX + "application.yml 已保存。");
         } else {
-            getLog().info("application.yml 配置已是最新，无需修改。");
+            getLog().info(LOG_PREFIX + "application.yml 配置已是最新，无需修改。");
         }
     }
 
-    private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<String, Object> tableDefinitions)
-            throws Exception {
-        getLog().info("--- 正在生成和比对数据库 Schema ---");
-        Map<String, String> typeMapping = (Map<String, String>) generatorConfig.get("type-mapping");
+    // [MODIFIED] 重构 manageDatabaseSchema 为多个小方法
+    private String generateAndCompareSchema(Map<String, Object> generatorConfig, Map<String, Object> tableDefinitions) throws Exception {
+        getLog().info(LOG_PREFIX + "--- 正在生成和比对数据库 Schema ---");
         List<Map<String, Object>> tables = (List<Map<String, Object>>) tableDefinitions.get("tables");
         StringBuilder sqlScript = new StringBuilder("-- Auto-generated by crud-generator-plugin\n\n");
 
-        Set<String> protectedColumns = new HashSet<>(Arrays.asList(
-                "id", "created_by", "created_by_name", "create_time",
-                "updated_by", "updated_by_name", "updated_time", "is_deleted", "version"));
-
-        Connection conn = null;
-        try {
-            conn = getDbConnection(generatorConfig);
+        try (Connection conn = getDbConnection(generatorConfig)) {
             for (Map<String, Object> table : tables) {
-                String tableName = (String) table.get("tableName");
-                DatabaseMetaData metaData = conn.getMetaData();
-                ResultSet rs = metaData.getTables(null, null, tableName, null);
-
-                if (rs.next()) { // 表存在，比对列
-                    sqlScript.append("-- Updating table '").append(tableName).append("'\n");
-
-                    Map<String, Map<String, String>> existingColumnsMap = getExistingColumns(metaData, tableName);
-                    List<Map<String, String>> desiredColumnsList = (List<Map<String, String>>) table.get("columns");
-                    Set<String> desiredColumnNames = desiredColumnsList.stream()
-                            .map(c -> toSnakeCase(c.get("javaName")))
-                            .collect(Collectors.toSet());
-
-                    // 1. 识别需要新增的字段
-                    List<Map<String, String>> columnsToAdd = desiredColumnsList.stream()
-                            .filter(c -> !existingColumnsMap.containsKey(toSnakeCase(c.get("javaName"))))
-                            .collect(Collectors.toList());
-
-                    // 2. 识别需要删除的字段
-                    List<String> columnsToDrop = existingColumnsMap.keySet().stream()
-                            .filter(existingCol -> !desiredColumnNames.contains(existingCol)
-                                    && !protectedColumns.contains(existingCol))
-                            .collect(Collectors.toList());
-
-                    boolean hasChanges = false;
-
-                    // 3. 生成 DROP 语句
-                    if (!columnsToDrop.isEmpty()) {
-                        hasChanges = true;
-                        for (String columnName : columnsToDrop) {
-                            sqlScript.append("ALTER TABLE `").append(tableName).append("` DROP COLUMN `")
-                                    .append(columnName).append("`;\n");
-                        }
-                    }
-
-                    // 4. 生成 ADD 语句 (带位置)
-                    if (!columnsToAdd.isEmpty()) {
-                        hasChanges = true;
-                        String lastKnownColumn = "id"; // 默认加在id后面
-                        List<String> desiredColumnsInOrder = desiredColumnsList.stream()
-                                .map(c -> toSnakeCase(c.get("javaName")))
-                                .collect(Collectors.toList());
-
-                        for (int i = desiredColumnsInOrder.size() - 1; i >= 0; i--) {
-                            String colName = desiredColumnsInOrder.get(i);
-                            if (existingColumnsMap.containsKey(colName)) {
-                                lastKnownColumn = colName;
-                                break;
-                            }
-                        }
-
-                        for (Map<String, String> column : columnsToAdd) {
-                            String javaName = column.get("javaName");
-                            String columnName = toSnakeCase(javaName);
-                            String javaType = column.get("javaType");
-                            String dbType = typeMapping.get(javaType);
-                            String comment = column.get("comment");
-                            sqlScript.append("ALTER TABLE `").append(tableName).append("` ADD COLUMN `")
-                                    .append(columnName)
-                                    .append("` ").append(dbType)
-                                    .append(" COMMENT '").append(comment).append("'")
-                                    .append(" AFTER `").append(lastKnownColumn).append("`;\n");
-                            lastKnownColumn = columnName; // 更新锚点，确保后续字段能跟在后面
-                        }
-                    }
-
-                    if (!hasChanges) {
-                        sqlScript.append("-- Table '").append(tableName).append("' structure is up to date.\n");
-                    }
-
-                } else { // 表不存在，生成 CREATE 语句
-                    sqlScript.append(generateCreateTableSql(table, typeMapping));
-                }
-                sqlScript.append("\n");
+                sqlScript.append(generateSchemaUpdateScriptForTable(table, conn, generatorConfig));
             }
-        } finally {
-            if (conn != null)
-                conn.close();
+        }
+        return sqlScript.toString();
+    }
+
+    private String generateSchemaUpdateScriptForTable(Map<String, Object> table, Connection conn, Map<String, Object> generatorConfig) throws SQLException {
+        String tableName = (String) table.get("tableName");
+        DatabaseMetaData metaData = conn.getMetaData();
+        ResultSet rs = metaData.getTables(null, null, tableName, null);
+
+        if (rs.next()) {
+            return generateAlterTableScript(table, metaData, generatorConfig);
+        } else {
+            return generateCreateTableSql(table, (Map<String, String>) generatorConfig.get("type-mapping"));
+        }
+    }
+
+    private String generateAlterTableScript(Map<String, Object> table, DatabaseMetaData metaData, Map<String, Object> generatorConfig) throws SQLException {
+        String tableName = (String) table.get("tableName");
+        StringBuilder script = new StringBuilder("-- Updating table '").append(tableName).append("'\n");
+        
+        Map<String, Map<String, String>> existingColumnsMap = getExistingColumns(metaData, tableName);
+        List<Map<String, String>> desiredColumnsList = (List<Map<String, String>>) table.get("columns");
+        Set<String> desiredColumnNames = desiredColumnsList.stream().map(c -> toSnakeCase(c.get("javaName"))).collect(Collectors.toSet());
+
+        List<String> columnsToDrop = existingColumnsMap.keySet().stream()
+            .filter(existingCol -> !desiredColumnNames.contains(existingCol) && !PROTECTED_COLUMNS.contains(existingCol))
+            .collect(Collectors.toList());
+        
+        script.append(generateDropColumnStatements(tableName, columnsToDrop));
+
+        List<Map<String, String>> columnsToAdd = desiredColumnsList.stream()
+            .filter(c -> !existingColumnsMap.containsKey(toSnakeCase(c.get("javaName"))))
+            .collect(Collectors.toList());
+        
+        script.append(generateAddColumnStatements(tableName, columnsToAdd, existingColumnsMap.keySet(), desiredColumnsList, (Map<String, String>) generatorConfig.get("type-mapping")));
+
+        if (columnsToAdd.isEmpty() && columnsToDrop.isEmpty()) {
+            script.append("-- Table '").append(tableName).append("' structure is up to date.\n");
+        }
+        return script.toString();
+    }
+
+    private String generateDropColumnStatements(String tableName, List<String> columnsToDrop) {
+        StringBuilder script = new StringBuilder();
+        for (String columnName : columnsToDrop) {
+            script.append("ALTER TABLE `").append(tableName).append("` DROP COLUMN `").append(columnName).append("`;\n");
+        }
+        return script.toString();
+    }
+
+    private String generateAddColumnStatements(String tableName, List<Map<String, String>> columnsToAdd, Set<String> existingColumnNames, List<Map<String, String>> allDesiredColumns, Map<String, String> typeMapping) {
+        if (columnsToAdd.isEmpty()) {
+            return "";
+        }
+        StringBuilder script = new StringBuilder();
+        String lastKnownColumn = "id"; 
+        List<String> desiredColumnsInOrder = allDesiredColumns.stream().map(c -> toSnakeCase(c.get("javaName"))).collect(Collectors.toList());
+        
+        for (int i = desiredColumnsInOrder.size() - 1; i >= 0; i--) {
+            String colName = desiredColumnsInOrder.get(i);
+            if (existingColumnNames.contains(colName)) {
+                lastKnownColumn = colName;
+                break;
+            }
         }
 
-        File sqlFile = new File(project.getBasedir(), "src/main/resources/sql/schema.sql");
+        for (Map<String, String> column : columnsToAdd) {
+            String javaName = column.get("javaName");
+            String columnName = toSnakeCase(javaName);
+            String javaType = column.get("javaType");
+            String dbType = typeMapping.get(javaType);
+            String comment = column.get("comment");
+            script.append("ALTER TABLE `").append(tableName).append("` ADD COLUMN `").append(columnName)
+                  .append("` ").append(dbType)
+                  .append(" COMMENT '").append(comment).append("'")
+                  .append(" AFTER `").append(lastKnownColumn).append("`;\n");
+            lastKnownColumn = columnName; 
+        }
+        return script.toString();
+    }
+    
+    private void saveSqlScript(String sqlScript) throws IOException {
+        File sqlFile = new File(project.getBasedir(), "src/main/resources/" + SCHEMA_SQL_FILE);
         sqlFile.getParentFile().mkdirs();
         try (Writer writer = new OutputStreamWriter(new FileOutputStream(sqlFile), StandardCharsets.UTF_8)) {
-            writer.write(sqlScript.toString());
-            getLog().info("SQL 脚本已生成: " + sqlFile.getAbsolutePath());
+            writer.write(sqlScript);
+            getLog().info(LOG_PREFIX + "SQL 脚本已生成: " + sqlFile.getAbsolutePath());
         }
+    }
 
-        if (executeSql) {
-            getLog().info("--- 正在执行 SQL 脚本到数据库 ---");
-            Connection executionConn = null;
-            try {
-                executionConn = getDbConnection(generatorConfig);
-                executionConn.setAutoCommit(false);
+    private void executeSqlScript(String sqlScript, Map<String, Object> generatorConfig) {
+        getLog().info(LOG_PREFIX + "--- 正在执行 SQL 脚本到数据库 ---");
+        Connection executionConn = null;
+        try {
+            executionConn = getDbConnection(generatorConfig);
+            executionConn.setAutoCommit(false); 
+            
+            String executableScript = Arrays.stream(sqlScript.split("\n"))
+                                            .filter(line -> !line.trim().startsWith("--"))
+                                            .collect(Collectors.joining("\n"));
 
-                String fullScript = sqlScript.toString();
-                String executableScript = Arrays.stream(fullScript.split("\n"))
-                        .filter(line -> !line.trim().startsWith("--"))
-                        .collect(Collectors.joining("\n"));
-
-                try (Statement stmt = executionConn.createStatement()) {
-                    for (String sql : executableScript.split(";")) {
-                        if (sql != null && !sql.trim().isEmpty()) {
-                            getLog().info("执行: " + sql.trim());
-                            stmt.execute(sql.trim());
-                        }
+            try (Statement stmt = executionConn.createStatement()) {
+                for (String sql : executableScript.split(";")) {
+                    if (sql != null && !sql.trim().isEmpty()) {
+                        getLog().info(LOG_PREFIX + "执行: " + sql.trim());
+                        stmt.execute(sql.trim());
                     }
                 }
-
-                executionConn.commit();
-                getLog().info("✅ SQL 脚本执行成功并已提交!");
-            } catch (Exception e) {
-                getLog().error("SQL 脚本执行失败! 正在回滚事务...", e);
-                if (executionConn != null) {
-                    try {
-                        executionConn.rollback();
-                        getLog().info("事务已回滚。");
-                    } catch (SQLException rollbackEx) {
-                        getLog().error("事务回滚失败!", rollbackEx);
-                    }
+            }
+            
+            executionConn.commit(); 
+            getLog().info(LOG_PREFIX + "✅ SQL 脚本执行成功并已提交!");
+        } catch (Exception e) {
+            getLog().error(LOG_PREFIX + "SQL 脚本执行失败! 正在回滚事务...", e);
+            if (executionConn != null) {
+                try {
+                    executionConn.rollback(); 
+                    getLog().info(LOG_PREFIX + "事务已回滚。");
+                } catch (SQLException rollbackEx) {
+                    getLog().error(LOG_PREFIX + "事务回滚失败!", rollbackEx);
                 }
-            } finally {
-                if (executionConn != null) {
-                    try {
-                        executionConn.setAutoCommit(true);
-                        executionConn.close();
-                    } catch (SQLException closeEx) {
-                        // ignore
-                    }
+            }
+        } finally {
+            if (executionConn != null) {
+                try {
+                    executionConn.setAutoCommit(true); 
+                    executionConn.close();
+                } catch (SQLException closeEx) {
+                    // ignore
                 }
             }
         }
     }
 
-    private Connection getDbConnection(Map<String, Object> generatorConfig)
-            throws SQLException, ClassNotFoundException {
+    private Connection getDbConnection(Map<String, Object> generatorConfig) throws SQLException, ClassNotFoundException {
         Map<String, String> jdbc = (Map<String, String>) generatorConfig.get("jdbc");
         Class.forName(jdbc.get("driver"));
-        return DriverManager.getConnection(jdbc.get("url"), jdbc.get("username"), String.valueOf(jdbc.get("password")));
+        return DriverManager.getConnection(jdbc.get("url"), jdbc.get("username"), jdbc.get("password"));
     }
 
-    private Map<String, Map<String, String>> getExistingColumns(DatabaseMetaData metaData, String tableName)
-            throws SQLException {
+    private Map<String, Map<String, String>> getExistingColumns(DatabaseMetaData metaData, String tableName) throws SQLException {
         Map<String, Map<String, String>> columns = new HashMap<>();
         ResultSet rs = metaData.getColumns(null, null, tableName, null);
         while (rs.next()) {
@@ -564,8 +531,7 @@ public class GenerateCrudMojo extends AbstractMojo {
             String javaType = column.get("javaType");
             String dbType = typeMapping.get(javaType);
             String comment = column.get("comment");
-            sb.append("  `").append(columnName).append("` ").append(dbType).append(" COMMENT '").append(comment)
-                    .append("',\n");
+            sb.append("  `").append(columnName).append("` ").append(dbType).append(" COMMENT '").append(comment).append("',\n");
         }
         sb.append("  `created_by` BIGINT COMMENT '创建人ID',\n");
         sb.append("  `created_by_name` VARCHAR(255) COMMENT '创建人名称',\n");
@@ -580,22 +546,19 @@ public class GenerateCrudMojo extends AbstractMojo {
         return sb.toString();
     }
 
-    private void processTemplate(String templateName, Map<String, Object> dataModel, String outputPath)
-            throws Exception {
+    private void processTemplate(String templateName, Map<String, Object> dataModel, String outputPath) throws Exception {
         File outputFile = new File(outputPath);
         outputFile.getParentFile().mkdirs();
         try (Writer writer = new OutputStreamWriter(new FileOutputStream(outputFile), StandardCharsets.UTF_8)) {
             Template template = freemarkerCfg.getTemplate(templateName);
             template.process(dataModel, writer);
-            getLog().info("  -> 已生成文件: " + outputPath);
+            getLog().info(LOG_PREFIX + "已生成文件: " + outputPath);
         }
     }
 
     private String getJavaOutputPath(Map<String, Object> generatorConfig, String packageKey, String fileName) {
-        // [FIXED] Pass generatorConfig as a parameter instead of reading from
-        // FreeMarker
         Map<String, Object> packageConf = (Map<String, Object>) generatorConfig.get("package");
-        String basePackage = (String) packageConf.get("basePackage");
+        String basePackage = (String) packageConf.get(PACKAGE_KEY_BASE);
         String subPackage = (String) packageConf.get(packageKey);
         String fullPackage = basePackage + "." + subPackage;
         String packagePath = fullPackage.replace('.', '/');
