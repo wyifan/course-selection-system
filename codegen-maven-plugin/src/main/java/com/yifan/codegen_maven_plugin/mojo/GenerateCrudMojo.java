@@ -18,8 +18,7 @@ import java.util.stream.Collectors;
 
 @Mojo(name = "generate-crud")
 public class GenerateCrudMojo extends AbstractMojo {
-
-    @Parameter(defaultValue = "${project}", readonly = true, required = true)
+ @Parameter(defaultValue = "${project}", readonly = true, required = true)
     private MavenProject project;
 
     @Parameter(property = "executeSql", defaultValue = "false")
@@ -38,8 +37,8 @@ public class GenerateCrudMojo extends AbstractMojo {
             Map<String, Object> rootDataModel = new HashMap<>();
             rootDataModel.put("generator", generatorConfig);
 
-            generateBaseFiles(rootDataModel);
-            generateCodeForTables(rootDataModel, tableDefinitions);
+            generateBaseFiles(rootDataModel, generatorConfig);
+            generateCodeForTables(rootDataModel, tableDefinitions, generatorConfig);
             manageApplicationYml(generatorConfig);
             manageDatabaseSchema(generatorConfig, tableDefinitions);
 
@@ -75,12 +74,12 @@ public class GenerateCrudMojo extends AbstractMojo {
         }
     }
 
-    private void generateBaseFiles(Map<String, Object> dataModel) throws Exception {
+    private void generateBaseFiles(Map<String, Object> dataModel, Map<String, Object> generatorConfig) throws Exception {
         getLog().info("--- 正在生成基础文件 ---");
-        processTemplate("baseEntity.ftl", dataModel, getJavaOutputPath("baseEntity", "BaseEntity.java"));
+        processTemplate("baseEntity.ftl", dataModel, getJavaOutputPath(generatorConfig, "baseEntity", "BaseEntity.java"));
     }
 
-    private void generateCodeForTables(Map<String, Object> rootDataModel, Map<String, Object> tableDefinitions) throws Exception {
+    private void generateCodeForTables(Map<String, Object> rootDataModel, Map<String, Object> tableDefinitions, Map<String, Object> generatorConfig) throws Exception {
         getLog().info("--- 正在为表定义生成代码 ---");
         List<Map<String, Object>> tables = (List<Map<String, Object>>) tableDefinitions.get("tables");
         if (tables == null || tables.isEmpty()) {
@@ -90,18 +89,18 @@ public class GenerateCrudMojo extends AbstractMojo {
         for (Map<String, Object> table : tables) {
             getLog().info("正在处理表: " + table.get("tableName"));
             rootDataModel.put("table", table);
-            generateTableSpecificFiles(rootDataModel);
+            generateTableSpecificFiles(rootDataModel, generatorConfig);
         }
     }
 
-    private void generateTableSpecificFiles(Map<String, Object> dataModel) throws Exception {
+    private void generateTableSpecificFiles(Map<String, Object> dataModel, Map<String, Object> generatorConfig) throws Exception {
         String entityName = (String) ((Map<String, Object>) dataModel.get("table")).get("entityName");
-        processTemplate("dto.ftl", dataModel, getJavaOutputPath("dto", entityName + "DTO.java"));
-        processTemplate("entity.ftl", dataModel, getJavaOutputPath("entity", entityName + ".java"));
-        processTemplate("service.ftl", dataModel, getJavaOutputPath("service", "I" + entityName + "Service.java"));
-        processTemplate("serviceImpl.ftl", dataModel, getJavaOutputPath("serviceImpl", entityName + "ServiceImpl.java"));
-        processTemplate("controller.ftl", dataModel, getJavaOutputPath("controller", entityName + "Controller.java"));
-        processTemplate("mapper.ftl", dataModel, getJavaOutputPath("mapper", entityName + "Mapper.java"));
+        processTemplate("dto.ftl", dataModel, getJavaOutputPath(generatorConfig, "dto", entityName + "DTO.java"));
+        processTemplate("entity.ftl", dataModel, getJavaOutputPath(generatorConfig, "entity", entityName + ".java"));
+        processTemplate("service.ftl", dataModel, getJavaOutputPath(generatorConfig, "service", "I" + entityName + "Service.java"));
+        processTemplate("serviceImpl.ftl", dataModel, getJavaOutputPath(generatorConfig, "serviceImpl", entityName + "ServiceImpl.java"));
+        processTemplate("controller.ftl", dataModel, getJavaOutputPath(generatorConfig, "controller", entityName + "Controller.java"));
+        processTemplate("mapper.ftl", dataModel, getJavaOutputPath(generatorConfig, "mapper", entityName + "Mapper.java"));
         processTemplate("mapperxml.ftl", dataModel, getResourceOutputPath("mapper", entityName + "Mapper.xml"));
     }
 
@@ -187,7 +186,7 @@ public class GenerateCrudMojo extends AbstractMojo {
     private Connection getDbConnection(Map<String, Object> generatorConfig) throws SQLException, ClassNotFoundException {
         Map<String, String> jdbc = (Map<String, String>) generatorConfig.get("jdbc");
         Class.forName(jdbc.get("driver"));
-        return DriverManager.getConnection(jdbc.get("url"), jdbc.get("username"), jdbc.get("password"));
+        return DriverManager.getConnection(jdbc.get("url"), jdbc.get("username"), String.valueOf(jdbc.get("password")));
     }
 
     private Map<String, Map<String, String>> getExistingColumns(DatabaseMetaData metaData, String tableName) throws SQLException {
@@ -240,10 +239,11 @@ public class GenerateCrudMojo extends AbstractMojo {
         }
     }
 
-    private String getJavaOutputPath(String packageKey, String fileName) {
-        Map<String, Object> generatorConfig = (Map<String, Object>)((Map<String, Object>)freemarkerCfg.getSharedVariable("generator")).get("package");
-        String basePackage = (String) generatorConfig.get("basePackage");
-        String subPackage = (String) generatorConfig.get(packageKey);
+    private String getJavaOutputPath(Map<String, Object> generatorConfig, String packageKey, String fileName) {
+        // [FIXED] Pass generatorConfig as a parameter instead of reading from FreeMarker
+        Map<String, Object> packageConf = (Map<String, Object>) generatorConfig.get("package");
+        String basePackage = (String) packageConf.get("basePackage");
+        String subPackage = (String) packageConf.get(packageKey);
         String fullPackage = basePackage + "." + subPackage;
         String packagePath = fullPackage.replace('.', '/');
         return project.getBasedir().getAbsolutePath() + "/src/main/java/" + packagePath + "/" + fileName;
@@ -254,6 +254,9 @@ public class GenerateCrudMojo extends AbstractMojo {
     }
 
     private String toSnakeCase(String str) {
+        if (str == null) {
+            return null;
+        }
         return str.replaceAll("([a-z])([A-Z]+)", "$1_$2").toLowerCase();
     }
 }

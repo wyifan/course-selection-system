@@ -11,6 +11,7 @@ generator:
     entity: entity
     mapper: mapper
     service: service
+    serviceImpl: service.impl
     controller: controller
     baseEntity: base
 
