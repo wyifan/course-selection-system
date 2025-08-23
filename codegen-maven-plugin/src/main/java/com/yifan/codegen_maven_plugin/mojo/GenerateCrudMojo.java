@@ -5,8 +5,10 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateExceptionHandler;
+import org.apache.maven.model.Build;
 import org.apache.maven.model.Dependency;
 import org.apache.maven.model.Model;
+import org.apache.maven.model.Plugin;
 import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
 import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
 import org.apache.maven.plugin.AbstractMojo;
@@ -14,6 +16,7 @@ import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.Mojo;
 import org.apache.maven.plugins.annotations.Parameter;
 import org.apache.maven.project.MavenProject;
+import org.codehaus.plexus.util.xml.Xpp3Dom;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -39,11 +42,8 @@ public class GenerateCrudMojo extends AbstractMojo {
             Map<String, Object> tableDefinitions = loadConfig("table-definitions.json", false);
             Map<String, Object> generatorConfig = (Map<String, Object>) settings.get("generator");
 
-            // [MODIFIED] 增加依赖管理和 application.yml 配置
-            manageProjectDependencies();
-            // [MODIFIED] 覆盖 basePackage
-            overrideBasePackageFromPom(generatorConfig);
-            manageApplicationYml(generatorConfig);
+            // [MODIFIED] Centralized POM and application.yml management
+            manageProjectConfiguration(generatorConfig);
 
             Map<String, Object> rootDataModel = new HashMap<>();
             rootDataModel.put("generator", generatorConfig);
@@ -60,9 +60,9 @@ public class GenerateCrudMojo extends AbstractMojo {
         }
     }
 
-    // [NEW] 检查并添加项目依赖
-    private void manageProjectDependencies() throws Exception {
-        getLog().info("--- 正在检查和更新项目依赖 ---");
+    // [NEW] Central method to manage all project configurations
+    private void manageProjectConfiguration(Map<String, Object> generatorConfig) throws Exception {
+        getLog().info("--- 正在初始化项目配置 ---");
         File pomFile = project.getFile();
         MavenXpp3Reader reader = new MavenXpp3Reader();
         Model model;
@@ -70,40 +70,13 @@ public class GenerateCrudMojo extends AbstractMojo {
             model = reader.read(fileReader);
         }
 
-        Map<String, String> requiredDeps = new LinkedHashMap<>();
-        requiredDeps.put("org.springframework.boot:spring-boot-starter-web", null); // 版本由父POM管理
-        requiredDeps.put("com.baomidou:mybatis-plus-boot-starter", "3.5.7");
-        requiredDeps.put("com.mysql:mysql-connector-j", null); // 版本由父POM管理
-        requiredDeps.put("org.projectlombok:lombok", null); // 版本由父POM管理
-
-        Set<String> existingDeps = model.getDependencies().stream()
-                .map(d -> d.getGroupId() + ":" + d.getArtifactId())
-                .collect(Collectors.toSet());
-
+        boolean hasParent = model.getParent() != null
+                && "spring-boot-starter-parent".equals(model.getParent().getArtifactId());
         boolean pomModified = false;
-        for (Map.Entry<String, String> entry : requiredDeps.entrySet()) {
-            String ga = entry.getKey();
-            if (!existingDeps.contains(ga)) {
-                pomModified = true;
-                String[] parts = ga.split(":");
-                Dependency dep = new Dependency();
-                dep.setGroupId(parts[0]);
-                dep.setArtifactId(parts[1]);
 
-                // 只有当父POM没有管理时，才设置版本
-                if (entry.getValue() != null && !isDependencyManaged(model, dep)) {
-                    dep.setVersion(entry.getValue());
-                }
-
-                // 对于lombok，通常需要 provided scope
-                if ("lombok".equals(dep.getArtifactId())) {
-                    dep.setScope("provided");
-                }
-
-                model.addDependency(dep);
-                getLog().info("已添加缺失的依赖: " + ga);
-            }
-        }
+        pomModified |= manageProperties(model, hasParent);
+        pomModified |= manageDependencies(model, hasParent);
+        pomModified |= manageBuild(model, hasParent);
 
         if (pomModified) {
             MavenXpp3Writer writer = new MavenXpp3Writer();
@@ -112,8 +85,158 @@ public class GenerateCrudMojo extends AbstractMojo {
                 getLog().info("pom.xml 已更新。");
             }
         } else {
-            getLog().info("项目依赖完整，无需修改。");
+            getLog().info("pom.xml 配置完整，无需修改。");
         }
+
+        overrideBasePackageFromPom(generatorConfig);
+        manageApplicationYml(generatorConfig);
+    }
+
+    // [MODIFIED] Updated to handle versions based on parent POM
+    private boolean manageBuild(Model model, boolean hasParent) {
+        boolean modified = false;
+        Build build = model.getBuild();
+        if (build == null) {
+            build = new Build();
+            model.setBuild(build);
+        }
+
+        // Maven Compiler Plugin
+        Optional<Plugin> compilerPluginOpt = build.getPlugins().stream()
+                .filter(p -> "org.apache.maven.plugins".equals(p.getGroupId())
+                        && "maven-compiler-plugin".equals(p.getArtifactId()))
+                .findFirst();
+
+        if (!compilerPluginOpt.isPresent()) {
+            Plugin compiler = new Plugin();
+            compiler.setGroupId("org.apache.maven.plugins");
+            compiler.setArtifactId("maven-compiler-plugin");
+            compiler.setVersion("3.11.0"); // A modern, stable version
+            Xpp3Dom config = new Xpp3Dom("configuration");
+            Xpp3Dom source = new Xpp3Dom("source");
+            source.setValue("${java.version}");
+            Xpp3Dom target = new Xpp3Dom("target");
+            target.setValue("${java.version}");
+            config.addChild(source);
+            config.addChild(target);
+            compiler.setConfiguration(config);
+            build.addPlugin(compiler);
+            modified = true;
+            getLog().info("已添加 maven-compiler-plugin 配置。");
+        }
+
+        // Spring Boot Maven Plugin
+        Optional<Plugin> springBootPluginOpt = build.getPlugins().stream()
+                .filter(p -> "org.springframework.boot".equals(p.getGroupId())
+                        && "spring-boot-maven-plugin".equals(p.getArtifactId()))
+                .findFirst();
+
+        if (!springBootPluginOpt.isPresent()) {
+            Plugin springBoot = new Plugin();
+            springBoot.setGroupId("org.springframework.boot");
+            springBoot.setArtifactId("spring-boot-maven-plugin");
+
+            if (!hasParent) {
+                springBoot.setVersion(model.getProperties().getProperty("spring-boot.version"));
+            }
+
+            Xpp3Dom config = new Xpp3Dom("configuration");
+            Xpp3Dom excludes = new Xpp3Dom("excludes");
+            Xpp3Dom exclude = new Xpp3Dom("exclude");
+            Xpp3Dom groupId = new Xpp3Dom("groupId");
+            groupId.setValue("org.projectlombok");
+            Xpp3Dom artifactId = new Xpp3Dom("artifactId");
+            artifactId.setValue("lombok");
+            exclude.addChild(groupId);
+            exclude.addChild(artifactId);
+            excludes.addChild(exclude);
+            config.addChild(excludes);
+            springBoot.setConfiguration(config);
+            build.addPlugin(springBoot);
+            modified = true;
+            getLog().info("已添加 spring-boot-maven-plugin 配置 (含 lombok 排除)。");
+        }
+
+        return modified;
+    }
+
+    // [NEW] Manages the <properties> section of the pom.xml
+    private boolean manageProperties(Model model, boolean hasParent) {
+        boolean modified = false;
+        Properties properties = model.getProperties();
+        if (properties == null) {
+            properties = new Properties();
+            model.setProperties(properties);
+        }
+
+        if (!"17".equals(properties.getProperty("java.version"))) {
+            properties.setProperty("java.version", "17");
+            modified = true;
+        }
+        if (!"UTF-8".equals(properties.getProperty("project.build.sourceEncoding"))) {
+            properties.setProperty("project.build.sourceEncoding", "UTF-8");
+            modified = true;
+        }
+
+        if (!hasParent) {
+            getLog().info("未找到 Spring Boot 父POM，将添加版本属性。");
+            Map<String, String> versionProps = new LinkedHashMap<>();
+            // Note: Spring Boot 3.5.4 is not a valid version. Using a recent, stable 3.x
+            // version.
+            versionProps.put("spring-boot.version", "3.2.5");
+            versionProps.put("mybatis-plus.version", "3.5.5");
+            versionProps.put("mysql.version", "8.3.0"); // Note: 9.3.0 is not a valid version.
+            versionProps.put("lombok.version", "1.18.32");
+
+            for (Map.Entry<String, String> entry : versionProps.entrySet()) {
+                if (!entry.getValue().equals(properties.getProperty(entry.getKey()))) {
+                    properties.setProperty(entry.getKey(), entry.getValue());
+                    modified = true;
+                }
+            }
+        }
+        return modified;
+    }
+
+    // [MODIFIED] Updated to handle versions based on parent POM
+    private boolean manageDependencies(Model model, boolean hasParent) {
+        Map<String, String> requiredDeps = new LinkedHashMap<>();
+        requiredDeps.put("org.springframework.boot:spring-boot-starter-web",
+                hasParent ? null : "${spring-boot.version}");
+        // Note: mybatis-plus-spring-boot3-starter is the correct artifactId for Spring
+        // Boot 3
+        requiredDeps.put("com.baomidou:mybatis-plus-spring-boot3-starter",
+                hasParent ? "3.5.5" : "${mybatis-plus.version}");
+        requiredDeps.put("com.mysql:mysql-connector-j", hasParent ? null : "${mysql.version}");
+        requiredDeps.put("org.projectlombok:lombok", hasParent ? null : "${lombok.version}");
+
+        Set<String> existingDeps = model.getDependencies().stream()
+                .map(d -> d.getGroupId() + ":" + d.getArtifactId())
+                .collect(Collectors.toSet());
+
+        boolean modified = false;
+        for (Map.Entry<String, String> entry : requiredDeps.entrySet()) {
+            String ga = entry.getKey();
+            if (!existingDeps.contains(ga)) {
+                modified = true;
+                String[] parts = ga.split(":");
+                Dependency dep = new Dependency();
+                dep.setGroupId(parts[0]);
+                dep.setArtifactId(parts[1]);
+
+                if (entry.getValue() != null) {
+                    dep.setVersion(entry.getValue());
+                }
+
+                if ("lombok".equals(dep.getArtifactId())) {
+                    dep.setScope("provided");
+                }
+
+                model.addDependency(dep);
+                getLog().info("已添加缺失的依赖: " + ga);
+            }
+        }
+        return modified;
     }
 
     private boolean isDependencyManaged(Model model, Dependency dep) {
@@ -241,7 +364,7 @@ public class GenerateCrudMojo extends AbstractMojo {
 
         if (!jdbcConfig.get("url").equals(datasource.get("url")) ||
                 !jdbcConfig.get("username").equals(datasource.get("username")) ||
-                !jdbcConfig.get("password").equals(datasource.get("password")) ||
+                !String.valueOf(jdbcConfig.get("password")).equals(String.valueOf(datasource.get("password"))) ||
                 !jdbcConfig.get("driver").equals(datasource.get("driver-class-name"))) {
 
             datasource.put("url", jdbcConfig.get("url"));

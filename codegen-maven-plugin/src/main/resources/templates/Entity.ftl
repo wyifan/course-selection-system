@@ -28,7 +28,7 @@ import java.time.*;
  */
 @Data
 <#if table.useBaseEntity>
-@@EqualsAndHashCode(callSuper = true)
+@EqualsAndHashCode(callSuper = true)
 @TableName("${table.tableName}")
 public class ${table.entityName} extends BaseEntity{
 <#else>
