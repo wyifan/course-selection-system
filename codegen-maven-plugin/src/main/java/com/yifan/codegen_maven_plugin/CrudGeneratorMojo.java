@@ -88,6 +88,7 @@ public class CrudGeneratorMojo extends AbstractMojo {
     private InputStream getSettingYml(String configFile) throws IOException {
 
         InputStream inputStream = null;
+        log.info("Loading configuration from: " + project.getBuild().getOutputDirectory());
         try {
             File file = new File(project.getBuild().getOutputDirectory(), configFile);
             if (!file.exists()) {

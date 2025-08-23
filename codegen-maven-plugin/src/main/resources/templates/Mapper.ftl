@@ -1,9 +1,17 @@
-package ${basePackage}.mapper;
+package ${generator.package.mapper};
 
+import ${generator.package.entity}.${table.entityName};
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import ${basePackage}.entity.${entityName};
-import org.apache.ibatis.annotations.Mapper;
 
-@Mapper
-public interface ${entityName}Mapper extends BaseMapper<${entityName}> {
+/**
+ * <p>
+ * ${table.entityName} Mapper 接口
+ * </p>
+ * 加上mapper注解，自动扫描，不加时，需要手动在配置类上添加@MapperScan
+ * @author CodeGenerator by Shawn Wang
+ * @since ${.now?string("yyyy-MM-dd")}
+ */
+ @Mapper
+public interface ${table.entityName}Mapper extends BaseMapper<${table.entityName}> {
+
 }

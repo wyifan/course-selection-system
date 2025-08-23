@@ -1,12 +1,16 @@
-package ${basePackage}.service;
+package ${generator.package.service};
 
-import ${basePackage}.dto.${entityName}DTO;
-import java.util.List;
+import ${generator.package.entity}.${table.entityName};
+import com.baomidou.mybatisplus.extension.service.IService;
 
-public interface ${entityName}Service {
-    ${entityName}DTO create(${entityName}DTO dto);
-    ${entityName}DTO update(Long id, ${entityName}DTO dto);
-    void delete(Long id);
-    ${entityName}DTO getById(Long id);
-    List<${entityName}DTO> listAll();
+/**
+ * <p>
+ * ${table.entityName} 服务类
+ * </p>
+ *
+ * @author CodeGenerator by Shawn Wang
+ * @since ${.now?string("yyyy-MM-dd")}
+ */
+public interface I${table.entityName}Service extends IService<${table.entityName}> {
+
 }

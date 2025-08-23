@@ -1,0 +1,8 @@
+server:
+  port: 8080
+  name: "Default Server"
+
+database:
+  url: "jdbc:h2:mem:defaultdb"
+  user: "sa"
+  message: "这是来自插件的默认数据库配置。"

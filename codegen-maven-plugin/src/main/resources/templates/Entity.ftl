@@ -1,23 +1,35 @@
-package ${basePackage}.entity;
+package ${generator.package.entity};
 
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-<#if useBaseEntity>
-import ${basePackage}.BaseEntity;
+import com.baomidou.mybatisplus.annotation.TableName;
+
+<#if table.useBaseEntity>
+import ${generator.package.baseEntity}.BaseEntity;
 </#if>
 
+/**
+ * <p>
+ * ${table.entityName} 实体类, 不参与网络传输，不需要实现 Serializable 接口
+ * </p>
+ *
+ * @author CodeGenerator by Shawn Wang
+ * @since ${.now?string("yyyy-MM-dd")}
+ */
 @Data
-<#if useBaseEntity>
+<#if table.useBaseEntity>
 @@EqualsAndHashCode(callSuper = true)
-public class ${entityName} extends BaseEntity {
+@TableName("${table.tableName}")
+public class ${table.entityName} extends BaseEntity{
 <#else>
-public class ${entityName} {
+public class ${table.entityName} {
 </#if>
-    <#list columns as field>
+
+    <#list table.columns as column>
     /**
-     * ${field.comment}
+     * ${column.comment}
      */
-    private ${field.javaType} ${field.javaName};
+    private ${column.javaType} ${column.javaName};
     </#list>
 }

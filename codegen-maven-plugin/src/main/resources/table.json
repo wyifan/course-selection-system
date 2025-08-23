@@ -1,0 +1,13 @@
+{
+  "source": "plugin-default",
+  "tables": [
+    {
+      "tableName": "user_default",
+      "entityName": "UserDefault",
+      "columns": [
+        { "javaName": "id", "javaType": "Long", "comment": "主键" },
+        { "javaName": "name", "javaType": "String", "comment": "名称" }
+      ]
+    }
+  ]
+}

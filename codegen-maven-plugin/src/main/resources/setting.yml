@@ -6,7 +6,7 @@ generator:
     driver: com.mysql.cj.jdbc.Driver
 
   package:
-    base: com.yifan.demo
+    dto: com.yifan.demo.dto
     entity: com.yifan.demo.entity
     mapper: com.yifan.demo.mapper
     service: com.yifan.demo.service

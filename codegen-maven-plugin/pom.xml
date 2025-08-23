@@ -26,6 +26,7 @@
         <jakarta.servlet.version>6.0.0</jakarta.servlet.version>
         <freemarker.version>2.3.33</freemarker.version>
         <lombok.version>1.18.34</lombok.version>
+        <jackson.version>2.15.2</jackson.version>
     </properties>
     <dependencies>
         <!-- 添加 Maven plugin 依赖 -->
@@ -79,6 +80,17 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>${swagger.version}</version>
+        </dependency>
+        <!-- 用于解析 YAML 文件的 Jackson 库 -->
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.dataformat</groupId>
+            <artifactId>jackson-dataformat-yaml</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
     </dependencies>
     <dependencyManagement>

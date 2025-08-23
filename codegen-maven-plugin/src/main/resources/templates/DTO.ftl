@@ -1,10 +1,25 @@
-package ${basePackage}.dto;
+package ${generator.package.dto};
 
 import lombok.Data;
 
+import java.io.Serializable;
+
+/**
+ * <p>
+ * ${table.entityName} DTO类, 参与网络传输，需要实现 Serializable 接口
+ * </p>
+ *
+ * @author CodeGenerator by Shawn Wang
+ * @since ${.now?string("yyyy-MM-dd")}
+ */
 @Data
-public class ${entityName}DTO {
-    <#list columns as field>
-    private ${field.javaType} ${field.javaName};
+public class ${table.entityName}DTO implements Serializable{
+    private static final long serialVersionUID = 1L;
+
+    <#list table.columns as column>
+    /**
+     * ${column.comment}
+     */
+    private ${column.javaType} ${column.javaName};
     </#list>
 }

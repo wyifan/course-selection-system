@@ -1,6 +1,7 @@
-package ${basePackage}.base;
+package ${generator.package.baseEntity};
 
 import lombok.Data;
+
 import java.time.LocalDateTime;
 
 import com.baomidou.mybatisplus.annotation.FieldFill;
@@ -11,10 +12,12 @@ import com.baomidou.mybatisplus.annotation.TableLogic;
 import com.baomidou.mybatisplus.annotation.Version;
 
 /**
- * 公共基础实体
+ * 公共基础实体,基类不参与RPC调用，无需序列化
+ * @author CodeGenerator by Shawn Wang
+ * @since ${.now?string("yyyy-MM-dd")}
  */
 @Data
-public class BaseEntity {
+public class BaseEntity{
     @TableId(type = IdType.AUTO)
     private Long id;
 
