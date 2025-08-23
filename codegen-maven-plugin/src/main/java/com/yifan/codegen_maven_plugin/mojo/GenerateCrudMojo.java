@@ -5,6 +5,10 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateExceptionHandler;
+import org.apache.maven.model.Dependency;
+import org.apache.maven.model.Model;
+import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
+import org.apache.maven.model.io.xpp3.MavenXpp3Writer;
 import org.apache.maven.plugin.AbstractMojo;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugins.annotations.Mojo;
@@ -35,15 +39,17 @@ public class GenerateCrudMojo extends AbstractMojo {
             Map<String, Object> tableDefinitions = loadConfig("table-definitions.json", false);
             Map<String, Object> generatorConfig = (Map<String, Object>) settings.get("generator");
 
+            // [MODIFIED] 增加依赖管理和 application.yml 配置
+            manageProjectDependencies();
             // [MODIFIED] 覆盖 basePackage
             overrideBasePackageFromPom(generatorConfig);
+            manageApplicationYml(generatorConfig);
 
             Map<String, Object> rootDataModel = new HashMap<>();
             rootDataModel.put("generator", generatorConfig);
 
             generateBaseFiles(rootDataModel, generatorConfig);
             generateCodeForTables(rootDataModel, tableDefinitions, generatorConfig);
-            manageApplicationYml(generatorConfig);
             manageDatabaseSchema(generatorConfig, tableDefinitions);
 
             getLog().info("✅ 所有任务执行成功!");
@@ -52,6 +58,71 @@ public class GenerateCrudMojo extends AbstractMojo {
             getLog().error("代码生成失败", e);
             throw new MojoExecutionException("代码生成过程中发生错误", e);
         }
+    }
+
+    // [NEW] 检查并添加项目依赖
+    private void manageProjectDependencies() throws Exception {
+        getLog().info("--- 正在检查和更新项目依赖 ---");
+        File pomFile = project.getFile();
+        MavenXpp3Reader reader = new MavenXpp3Reader();
+        Model model;
+        try (FileReader fileReader = new FileReader(pomFile)) {
+            model = reader.read(fileReader);
+        }
+
+        Map<String, String> requiredDeps = new LinkedHashMap<>();
+        requiredDeps.put("org.springframework.boot:spring-boot-starter-web", null); // 版本由父POM管理
+        requiredDeps.put("com.baomidou:mybatis-plus-boot-starter", "3.5.7");
+        requiredDeps.put("com.mysql:mysql-connector-j", null); // 版本由父POM管理
+        requiredDeps.put("org.projectlombok:lombok", null); // 版本由父POM管理
+
+        Set<String> existingDeps = model.getDependencies().stream()
+                .map(d -> d.getGroupId() + ":" + d.getArtifactId())
+                .collect(Collectors.toSet());
+
+        boolean pomModified = false;
+        for (Map.Entry<String, String> entry : requiredDeps.entrySet()) {
+            String ga = entry.getKey();
+            if (!existingDeps.contains(ga)) {
+                pomModified = true;
+                String[] parts = ga.split(":");
+                Dependency dep = new Dependency();
+                dep.setGroupId(parts[0]);
+                dep.setArtifactId(parts[1]);
+
+                // 只有当父POM没有管理时，才设置版本
+                if (entry.getValue() != null && !isDependencyManaged(model, dep)) {
+                    dep.setVersion(entry.getValue());
+                }
+
+                // 对于lombok，通常需要 provided scope
+                if ("lombok".equals(dep.getArtifactId())) {
+                    dep.setScope("provided");
+                }
+
+                model.addDependency(dep);
+                getLog().info("已添加缺失的依赖: " + ga);
+            }
+        }
+
+        if (pomModified) {
+            MavenXpp3Writer writer = new MavenXpp3Writer();
+            try (FileWriter fileWriter = new FileWriter(pomFile)) {
+                writer.write(fileWriter, model);
+                getLog().info("pom.xml 已更新。");
+            }
+        } else {
+            getLog().info("项目依赖完整，无需修改。");
+        }
+    }
+
+    private boolean isDependencyManaged(Model model, Dependency dep) {
+        if (model.getDependencyManagement() == null) {
+            return false;
+        }
+        return model.getDependencyManagement().getDependencies().stream()
+                .anyMatch(managedDep -> managedDep.getGroupId().equals(dep.getGroupId()) &&
+                        managedDep.getArtifactId().equals(dep.getArtifactId()));
     }
 
     /**
@@ -143,34 +214,62 @@ public class GenerateCrudMojo extends AbstractMojo {
         processTemplate("mapperxml.ftl", dataModel, getResourceOutputPath("mapper", entityName + "Mapper.xml"));
     }
 
+    // [MODIFIED] 扩展此方法以包含数据库连接配置
     private void manageApplicationYml(Map<String, Object> generatorConfig) throws Exception {
         getLog().info("--- 正在检查和更新 application.yml ---");
         File ymlFile = new File(project.getBasedir(), "src/main/resources/application.yml");
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
         Map<String, Object> appConfig = ymlFile.exists() ? mapper.readValue(ymlFile, Map.class) : new LinkedHashMap<>();
+        boolean isModified = false;
 
+        // 1. 配置 Mybatis Plus
         Map<String, Object> mybatisPlus = (Map<String, Object>) appConfig.computeIfAbsent("mybatis-plus",
                 k -> new LinkedHashMap<>());
         String expectedLocation = "classpath*:/mapper/**/*.xml";
         if (!expectedLocation.equals(mybatisPlus.get("mapper-locations"))) {
             mybatisPlus.put("mapper-locations", expectedLocation);
+            isModified = true;
+            getLog().info("application.yml: 已添加 mybatis-plus.mapper-locations 配置。");
+        }
+
+        // 2. 配置数据源
+        Map<String, Object> spring = (Map<String, Object>) appConfig.computeIfAbsent("spring",
+                k -> new LinkedHashMap<>());
+        Map<String, Object> datasource = (Map<String, Object>) spring.computeIfAbsent("datasource",
+                k -> new LinkedHashMap<>());
+        Map<String, String> jdbcConfig = (Map<String, String>) generatorConfig.get("jdbc");
+
+        if (!jdbcConfig.get("url").equals(datasource.get("url")) ||
+                !jdbcConfig.get("username").equals(datasource.get("username")) ||
+                !jdbcConfig.get("password").equals(datasource.get("password")) ||
+                !jdbcConfig.get("driver").equals(datasource.get("driver-class-name"))) {
+
+            datasource.put("url", jdbcConfig.get("url"));
+            datasource.put("username", jdbcConfig.get("username"));
+            datasource.put("password", jdbcConfig.get("password"));
+            datasource.put("driver-class-name", jdbcConfig.get("driver"));
+            isModified = true;
+            getLog().info("application.yml: 已更新 spring.datasource 配置。");
+        }
+
+        if (isModified) {
             mapper.writeValue(ymlFile, appConfig);
-            getLog().info("application.yml 中 mybatis-plus.mapper-locations 已更新。");
+            getLog().info("application.yml 已保存。");
         } else {
             getLog().info("application.yml 配置已是最新，无需修改。");
         }
     }
 
-private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<String, Object> tableDefinitions) throws Exception {
+    private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<String, Object> tableDefinitions)
+            throws Exception {
         getLog().info("--- 正在生成和比对数据库 Schema ---");
         Map<String, String> typeMapping = (Map<String, String>) generatorConfig.get("type-mapping");
         List<Map<String, Object>> tables = (List<Map<String, Object>>) tableDefinitions.get("tables");
         StringBuilder sqlScript = new StringBuilder("-- Auto-generated by crud-generator-plugin\n\n");
 
         Set<String> protectedColumns = new HashSet<>(Arrays.asList(
-            "id", "created_by", "created_by_name", "create_time", 
-            "updated_by", "updated_by_name", "updated_time", "is_deleted", "version"
-        ));
+                "id", "created_by", "created_by_name", "create_time",
+                "updated_by", "updated_by_name", "updated_time", "is_deleted", "version"));
 
         Connection conn = null;
         try {
@@ -182,22 +281,23 @@ private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<Strin
 
                 if (rs.next()) { // 表存在，比对列
                     sqlScript.append("-- Updating table '").append(tableName).append("'\n");
-                    
+
                     Map<String, Map<String, String>> existingColumnsMap = getExistingColumns(metaData, tableName);
                     List<Map<String, String>> desiredColumnsList = (List<Map<String, String>>) table.get("columns");
                     Set<String> desiredColumnNames = desiredColumnsList.stream()
-                                                                       .map(c -> toSnakeCase(c.get("javaName")))
-                                                                       .collect(Collectors.toSet());
+                            .map(c -> toSnakeCase(c.get("javaName")))
+                            .collect(Collectors.toSet());
 
                     // 1. 识别需要新增的字段
                     List<Map<String, String>> columnsToAdd = desiredColumnsList.stream()
-                        .filter(c -> !existingColumnsMap.containsKey(toSnakeCase(c.get("javaName"))))
-                        .collect(Collectors.toList());
+                            .filter(c -> !existingColumnsMap.containsKey(toSnakeCase(c.get("javaName"))))
+                            .collect(Collectors.toList());
 
                     // 2. 识别需要删除的字段
                     List<String> columnsToDrop = existingColumnsMap.keySet().stream()
-                        .filter(existingCol -> !desiredColumnNames.contains(existingCol) && !protectedColumns.contains(existingCol))
-                        .collect(Collectors.toList());
+                            .filter(existingCol -> !desiredColumnNames.contains(existingCol)
+                                    && !protectedColumns.contains(existingCol))
+                            .collect(Collectors.toList());
 
                     boolean hasChanges = false;
 
@@ -205,7 +305,8 @@ private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<Strin
                     if (!columnsToDrop.isEmpty()) {
                         hasChanges = true;
                         for (String columnName : columnsToDrop) {
-                            sqlScript.append("ALTER TABLE `").append(tableName).append("` DROP COLUMN `").append(columnName).append("`;\n");
+                            sqlScript.append("ALTER TABLE `").append(tableName).append("` DROP COLUMN `")
+                                    .append(columnName).append("`;\n");
                         }
                     }
 
@@ -214,9 +315,9 @@ private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<Strin
                         hasChanges = true;
                         String lastKnownColumn = "id"; // 默认加在id后面
                         List<String> desiredColumnsInOrder = desiredColumnsList.stream()
-                                                                               .map(c -> toSnakeCase(c.get("javaName")))
-                                                                               .collect(Collectors.toList());
-                        
+                                .map(c -> toSnakeCase(c.get("javaName")))
+                                .collect(Collectors.toList());
+
                         for (int i = desiredColumnsInOrder.size() - 1; i >= 0; i--) {
                             String colName = desiredColumnsInOrder.get(i);
                             if (existingColumnsMap.containsKey(colName)) {
@@ -231,10 +332,11 @@ private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<Strin
                             String javaType = column.get("javaType");
                             String dbType = typeMapping.get(javaType);
                             String comment = column.get("comment");
-                            sqlScript.append("ALTER TABLE `").append(tableName).append("` ADD COLUMN `").append(columnName)
-                                     .append("` ").append(dbType)
-                                     .append(" COMMENT '").append(comment).append("'")
-                                     .append(" AFTER `").append(lastKnownColumn).append("`;\n");
+                            sqlScript.append("ALTER TABLE `").append(tableName).append("` ADD COLUMN `")
+                                    .append(columnName)
+                                    .append("` ").append(dbType)
+                                    .append(" COMMENT '").append(comment).append("'")
+                                    .append(" AFTER `").append(lastKnownColumn).append("`;\n");
                             lastKnownColumn = columnName; // 更新锚点，确保后续字段能跟在后面
                         }
                     }
@@ -249,7 +351,8 @@ private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<Strin
                 sqlScript.append("\n");
             }
         } finally {
-            if (conn != null) conn.close();
+            if (conn != null)
+                conn.close();
         }
 
         File sqlFile = new File(project.getBasedir(), "src/main/resources/sql/schema.sql");
@@ -264,12 +367,12 @@ private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<Strin
             Connection executionConn = null;
             try {
                 executionConn = getDbConnection(generatorConfig);
-                executionConn.setAutoCommit(false); 
-                
+                executionConn.setAutoCommit(false);
+
                 String fullScript = sqlScript.toString();
                 String executableScript = Arrays.stream(fullScript.split("\n"))
-                                                .filter(line -> !line.trim().startsWith("--"))
-                                                .collect(Collectors.joining("\n"));
+                        .filter(line -> !line.trim().startsWith("--"))
+                        .collect(Collectors.joining("\n"));
 
                 try (Statement stmt = executionConn.createStatement()) {
                     for (String sql : executableScript.split(";")) {
@@ -279,14 +382,14 @@ private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<Strin
                         }
                     }
                 }
-                
-                executionConn.commit(); 
+
+                executionConn.commit();
                 getLog().info("✅ SQL 脚本执行成功并已提交!");
             } catch (Exception e) {
                 getLog().error("SQL 脚本执行失败! 正在回滚事务...", e);
                 if (executionConn != null) {
                     try {
-                        executionConn.rollback(); 
+                        executionConn.rollback();
                         getLog().info("事务已回滚。");
                     } catch (SQLException rollbackEx) {
                         getLog().error("事务回滚失败!", rollbackEx);
@@ -295,7 +398,7 @@ private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<Strin
             } finally {
                 if (executionConn != null) {
                     try {
-                        executionConn.setAutoCommit(true); 
+                        executionConn.setAutoCommit(true);
                         executionConn.close();
                     } catch (SQLException closeEx) {
                         // ignore
@@ -304,6 +407,7 @@ private void manageDatabaseSchema(Map<String, Object> generatorConfig, Map<Strin
             }
         }
     }
+
     private Connection getDbConnection(Map<String, Object> generatorConfig)
             throws SQLException, ClassNotFoundException {
         Map<String, String> jdbc = (Map<String, String>) generatorConfig.get("jdbc");
