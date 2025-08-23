@@ -2,6 +2,7 @@ package com.yifan.codegen_maven_plugin.mojo;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.fasterxml.jackson.dataformat.yaml.YAMLGenerator;
 import freemarker.template.Configuration;
 import freemarker.template.Template;
 import freemarker.template.TemplateExceptionHandler;
@@ -316,10 +317,19 @@ public class GenerateCrudMojo extends AbstractMojo {
         processTemplate("mapperxml.ftl", dataModel, getResourceOutputPath("mapper", entityName + "Mapper.xml"));
     }
 
+   /**
+    * 创建了一个自定义的 YAMLFactory，并禁用了 WRITE_DOC_START_MARKER 功能。这将阻止 Jackson 在生成 YAML 文件时写入开头的 --- 分隔符。
+    * @param generatorConfig
+    * @throws Exception
+    */
     private void manageApplicationYml(Map<String, Object> generatorConfig) throws Exception {
         getLog().info(LOG_PREFIX + "--- 正在检查和更新 application.yml ---");
         File ymlFile = new File(project.getBasedir(), "src/main/resources/" + APPLICATION_YML_FILE);
-        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        
+        // [MODIFIED] 配置 YAMLFactory 以禁用文档开始标记 '---'
+        YAMLFactory factory = new YAMLFactory().disable(YAMLGenerator.Feature.WRITE_DOC_START_MARKER);
+        ObjectMapper mapper = new ObjectMapper(factory);
+
         Map<String, Object> appConfig = ymlFile.exists() ? mapper.readValue(ymlFile, Map.class) : new LinkedHashMap<>();
         if (appConfig == null) appConfig = new LinkedHashMap<>();
         boolean isModified = false;
@@ -335,7 +345,6 @@ public class GenerateCrudMojo extends AbstractMojo {
         Map<String, Object> spring = (Map<String, Object>) appConfig.computeIfAbsent("spring", k -> new LinkedHashMap<>());
         Map<String, Object> datasource = (Map<String, Object>) spring.computeIfAbsent("datasource", k -> new LinkedHashMap<>());
         
-        // [MODIFIED] Cast to Map<String, Object> and convert values to String to prevent ClassCastException
         Map<String, Object> jdbcConfig = (Map<String, Object>) generatorConfig.get("jdbc");
         String url = String.valueOf(jdbcConfig.get("url"));
         String username = String.valueOf(jdbcConfig.get("username"));
@@ -356,7 +365,17 @@ public class GenerateCrudMojo extends AbstractMojo {
         }
 
         if (isModified) {
-            mapper.writeValue(ymlFile, appConfig);
+            String yamlOutput = mapper.writeValueAsString(appConfig);
+            
+            // [MODIFIED] 添加注释
+            String mybatisPlusComment = "# MyBatis Plus Mapper XML 配置文件路径";
+            if (yamlOutput.contains("mybatis-plus:") && !yamlOutput.contains(mybatisPlusComment)) {
+                yamlOutput = yamlOutput.replace("mybatis-plus:", mybatisPlusComment + "\nmybatis-plus:");
+            }
+
+            try (Writer writer = new OutputStreamWriter(new FileOutputStream(ymlFile), StandardCharsets.UTF_8)) {
+                writer.write(yamlOutput);
+            }
             getLog().info(LOG_PREFIX + "application.yml 已保存。");
         } else {
             getLog().info(LOG_PREFIX + "application.yml 配置已是最新，无需修改。");
