@@ -10,23 +10,22 @@
     <packaging>maven-plugin</packaging>
 
 
-    <name>codegen-maven-plugin Maven Mojo</name>
+    <name>MyBatisPlus CRUD Generator Plugin</name>
     <url>http://maven.apache.org</url>
     <description>Code generator for mybatis plus</description>
 
     <properties>
         <java.version>17</java.version>
         <maven.version>3.6.3</maven.version>
+        <maven.project.version>2.2.1</maven.project.version>
         <maven.compiler.target>17</maven.compiler.target>
         <maven.compiler.source>17</maven.compiler.source>
+        <maven.plugin.annotations.version>3.6.0</maven.plugin.annotations.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <mybatis-plus.version>3.5.5</mybatis-plus.version>
         <mysql.version>9.3.0</mysql.version>
-        <spring-boot.version>3.5.4</spring-boot.version>
-        <swagger.version>2.8.9</swagger.version>
-        <jakarta.servlet.version>6.0.0</jakarta.servlet.version>
         <freemarker.version>2.3.33</freemarker.version>
         <lombok.version>1.18.34</lombok.version>
+        <slf4j.version>1.7.32</slf4j.version>
         <jackson.version>2.15.2</jackson.version>
     </properties>
     <dependencies>
@@ -36,21 +35,21 @@
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-plugin-api</artifactId>
-            <version>3.6.3</version>
+            <version>${maven.version}</version>
             <scope>provided</scope>
         </dependency>
         <!-- comes in handy to use annotations in our classes-->
         <dependency>
             <groupId>org.apache.maven.plugin-tools</groupId>
             <artifactId>maven-plugin-annotations</artifactId>
-            <version>3.6.0</version>
+            <version>${maven.plugin.annotations.version}</version>
             <scope>provided</scope>
         </dependency>
         <!-- let us access the information about the project where we're including the plugin-->
         <dependency>
             <groupId>org.apache.maven</groupId>
             <artifactId>maven-project</artifactId>
-            <version>2.2.1</version>
+            <version>${maven.project.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>
@@ -60,28 +59,24 @@
             <scope>provided</scope>
             <optional>true</optional>
         </dependency>
+        <!-- [ADDED] SLF4J API for Logging -->
+        <!-- Lombok's @Slf4j generates code that uses this API -->
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>provided</scope>
+        </dependency>
         <dependency>
             <groupId>org.freemarker</groupId>
             <artifactId>freemarker</artifactId>
+            <version>${freemarker.version}</version>
         </dependency>
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
+            <version>${mysql.version}</version>
         </dependency>
-        <dependency>
-            <groupId>com.baomidou</groupId>
-            <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <version>${swagger.version}</version>
-        </dependency>                
         <!-- [NEW] 添加 Maven Model 用于读写 pom.xml -->
         <dependency>
             <groupId>org.apache.maven</groupId>
@@ -101,43 +96,6 @@
             <version>${jackson.version}</version>
         </dependency>
     </dependencies>
-    <dependencyManagement>
-        <dependencies>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-starter-web</artifactId>
-                <version>${spring-boot.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.springframework.boot</groupId>
-                <artifactId>spring-boot-dependencies</artifactId>
-                <version>${spring-boot.version}</version>
-                <type>pom</type>
-                <scope>import</scope>
-            </dependency>
-            <dependency>
-                <groupId>com.baomidou</groupId>
-                <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
-                <version>${mybatis-plus.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.mysql</groupId>
-                <artifactId>mysql-connector-j</artifactId>
-                <version>${mysql.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>jakarta.servlet</groupId>
-                <artifactId>jakarta.servlet-api</artifactId>
-                <version>${jakarta.servlet.version}</version> <!-- Or a compatible version for your environment -->
-                <scope>provided</scope> <!-- Or compile, depending on your setup -->
-            </dependency>
-            <dependency>
-                <groupId>org.freemarker</groupId>
-                <artifactId>freemarker</artifactId>
-                <version>${freemarker.version}</version>
-            </dependency>
-        </dependencies>
-    </dependencyManagement>
     <build>
         <plugins>
             <plugin>
