@@ -27,6 +27,7 @@ import java.util.stream.Collectors;
 @Mojo(name = "generate-crud")
 public class GenerateCrudMojo extends AbstractMojo {
     
+    
     // [MODIFIED] 提取所有字符串为常量
     private static final String SETTINGS_FILE = "setting.yml";
     private static final String TABLE_DEFINITIONS_FILE = "table-definitions.json";
@@ -333,17 +334,23 @@ public class GenerateCrudMojo extends AbstractMojo {
 
         Map<String, Object> spring = (Map<String, Object>) appConfig.computeIfAbsent("spring", k -> new LinkedHashMap<>());
         Map<String, Object> datasource = (Map<String, Object>) spring.computeIfAbsent("datasource", k -> new LinkedHashMap<>());
-        Map<String, String> jdbcConfig = (Map<String, String>) generatorConfig.get("jdbc");
         
-        if (!Objects.equals(jdbcConfig.get("url"), datasource.get("url")) ||
-            !Objects.equals(jdbcConfig.get("username"), datasource.get("username")) ||
-            !Objects.equals(jdbcConfig.get("password"), datasource.get("password")) ||
-            !Objects.equals(jdbcConfig.get("driver"), datasource.get("driver-class-name"))) {
+        // [MODIFIED] Cast to Map<String, Object> and convert values to String to prevent ClassCastException
+        Map<String, Object> jdbcConfig = (Map<String, Object>) generatorConfig.get("jdbc");
+        String url = String.valueOf(jdbcConfig.get("url"));
+        String username = String.valueOf(jdbcConfig.get("username"));
+        String password = String.valueOf(jdbcConfig.get("password"));
+        String driver = String.valueOf(jdbcConfig.get("driver"));
+        
+        if (!Objects.equals(url, datasource.get("url")) ||
+            !Objects.equals(username, datasource.get("username")) ||
+            !Objects.equals(password, datasource.get("password")) ||
+            !Objects.equals(driver, datasource.get("driver-class-name"))) {
             
-            datasource.put("url", jdbcConfig.get("url"));
-            datasource.put("username", jdbcConfig.get("username"));
-            datasource.put("password", jdbcConfig.get("password"));
-            datasource.put("driver-class-name", jdbcConfig.get("driver"));
+            datasource.put("url", url);
+            datasource.put("username", username);
+            datasource.put("password", password);
+            datasource.put("driver-class-name", driver);
             isModified = true;
             getLog().info(LOG_PREFIX + "application.yml: 已更新 spring.datasource 配置。");
         }
@@ -356,7 +363,6 @@ public class GenerateCrudMojo extends AbstractMojo {
         }
     }
 
-    // [MODIFIED] 重构 manageDatabaseSchema 为多个小方法
     private String generateAndCompareSchema(Map<String, Object> generatorConfig, Map<String, Object> tableDefinitions) throws Exception {
         getLog().info(LOG_PREFIX + "--- 正在生成和比对数据库 Schema ---");
         List<Map<String, Object>> tables = (List<Map<String, Object>>) tableDefinitions.get("tables");
@@ -501,9 +507,15 @@ public class GenerateCrudMojo extends AbstractMojo {
     }
 
     private Connection getDbConnection(Map<String, Object> generatorConfig) throws SQLException, ClassNotFoundException {
-        Map<String, String> jdbc = (Map<String, String>) generatorConfig.get("jdbc");
-        Class.forName(jdbc.get("driver"));
-        return DriverManager.getConnection(jdbc.get("url"), jdbc.get("username"), jdbc.get("password"));
+        // [MODIFIED] Cast to Map<String, Object> and convert values to String to prevent ClassCastException
+        Map<String, Object> jdbc = (Map<String, Object>) generatorConfig.get("jdbc");
+        String url = String.valueOf(jdbc.get("url"));
+        String username = String.valueOf(jdbc.get("username"));
+        String password = String.valueOf(jdbc.get("password"));
+        String driver = String.valueOf(jdbc.get("driver"));
+        
+        Class.forName(driver);
+        return DriverManager.getConnection(url, username, password);
     }
 
     private Map<String, Map<String, String>> getExistingColumns(DatabaseMetaData metaData, String tableName) throws SQLException {
