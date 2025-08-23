@@ -174,6 +174,9 @@ mvn codegen:generate-crud
   # 简洁命令 (需要配置 goalPrefix)
   mvn codegen:generate-crud
 
+  # 如果提示 codegen找不到，可以到maven settings.xml中pluginGroups添加
+  # <pluginGroup>com.yifan</pluginGroup>
+
   # 完整命令 (无需配置 goalPrefix)
   mvn com.yifan:codegen-maven-plugin:generate-crud
   ```
