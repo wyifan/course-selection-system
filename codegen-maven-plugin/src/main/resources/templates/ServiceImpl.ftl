@@ -1,46 +1,20 @@
-package ${basePackage}.service.impl;
+package ${generator.package.basePackage}.${generator.package.serviceImpl};
 
-import ${basePackage}.dto.${entityName}DTO;
-import ${basePackage}.entity.${entityName};
-import ${basePackage}.mapper.${entityName}Mapper;
-import ${basePackage}.service.${entityName}Service;
-import org.springframework.beans.factory.annotation.Autowired;
+import ${generator.package.basePackage}.${generator.package.entity}.${table.entityName};
+import ${generator.package.basePackage}.${generator.package.mapper}.${table.entityName}Mapper;
+import ${generator.package.basePackage}.${generator.package.service}.I${table.entityName}Service;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import org.springframework.stereotype.Service;
 
-import java.util.List;
-
+/**
+ * <p>
+ * ${table.entityName} 服务实现类
+ * </p>
+ *
+ * @author CodeGenerator  by Shawn Wang
+ * @since ${.now?string("yyyy-MM-dd HH:mm:ss")}
+ */
 @Service
-public class ${entityName}ServiceImpl implements ${entityName}Service {
+public class ${table.entityName}ServiceImpl extends ServiceImpl<${table.entityName}Mapper, ${table.entityName}> implements I${table.entityName}Service {
 
-    @Autowired
-    private ${entityName}Mapper mapper;
-
-    @Override
-    public ${entityName}DTO create(${entityName}DTO dto) {
-        // TODO: convert DTO to Entity
-        return dto;
-    }
-
-    @Override
-    public ${entityName}DTO update(Long id, ${entityName}DTO dto) {
-        // TODO: implement update
-        return dto;
-    }
-
-    @Override
-    public void delete(Long id) {
-        mapper.deleteById(id);
-    }
-
-    @Override
-    public ${entityName}DTO getById(Long id) {
-        // TODO: convert Entity to DTO
-        return new ${entityName}DTO();
-    }
-
-    @Override
-    public List<${entityName}DTO> listAll() {
-        // TODO: implement listAll
-        return List.of();
-    }
 }

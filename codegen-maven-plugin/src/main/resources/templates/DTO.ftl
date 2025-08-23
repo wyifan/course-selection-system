@@ -1,8 +1,20 @@
-package ${generator.package.dto};
+package ${generator.package.basePackage}.${generator.package.dto};
 
 import lombok.Data;
 
 import java.io.Serializable;
+<#list table.columns as column>
+    <#if column.javaType == "BigDecimal">
+import java.math.BigDecimal;
+        <#break>
+    </#if>
+</#list>
+<#list table.columns as column>
+    <#if column.javaType == "LocalDate" || column.javaType == "LocalDateTime">
+import java.time.*;
+        <#break>
+    </#if>
+</#list>
 
 /**
  * <p>
@@ -10,7 +22,7 @@ import java.io.Serializable;
  * </p>
  *
  * @author CodeGenerator by Shawn Wang
- * @since ${.now?string("yyyy-MM-dd")}
+ * @since ${.now?string("yyyy-MM-dd HH:mm:ss")}
  */
 @Data
 public class ${table.entityName}DTO implements Serializable{

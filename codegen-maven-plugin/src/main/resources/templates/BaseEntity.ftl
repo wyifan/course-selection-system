@@ -1,4 +1,4 @@
-package ${generator.package.baseEntity};
+package ${generator.package.basePackage}.${generator.package.baseEntity};
 
 import lombok.Data;
 
@@ -14,7 +14,7 @@ import com.baomidou.mybatisplus.annotation.Version;
 /**
  * 公共基础实体,基类不参与RPC调用，无需序列化
  * @author CodeGenerator by Shawn Wang
- * @since ${.now?string("yyyy-MM-dd")}
+ * @since ${.now?string("yyyy-MM-dd HH:mm:ss")}
  */
 @Data
 public class BaseEntity{
@@ -40,5 +40,6 @@ public class BaseEntity{
     private Integer isDeleted;
 
     @Version
+    @TableField(fill = FieldFill.INSERT)
     private Integer version;
 }

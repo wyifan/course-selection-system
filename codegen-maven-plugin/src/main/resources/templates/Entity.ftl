@@ -1,13 +1,22 @@
-package ${generator.package.entity};
+package ${generator.package.basePackage}.${generator.package.entity};
 
+import com.baomidou.mybatisplus.annotation.TableName;
+import ${generator.package.basePackage}.${generator.package.baseEntity}.BaseEntity;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
 
-import com.baomidou.mybatisplus.annotation.TableName;
-
-<#if table.useBaseEntity>
-import ${generator.package.baseEntity}.BaseEntity;
-</#if>
+<#list table.columns as column>
+    <#if column.javaType == "BigDecimal">
+import java.math.BigDecimal;
+        <#break>
+    </#if>
+</#list>
+<#list table.columns as column>
+    <#if column.javaType == "LocalDate" || column.javaType == "LocalDateTime">
+import java.time.*;
+        <#break>
+    </#if>
+</#list>
 
 /**
  * <p>
@@ -15,7 +24,7 @@ import ${generator.package.baseEntity}.BaseEntity;
  * </p>
  *
  * @author CodeGenerator by Shawn Wang
- * @since ${.now?string("yyyy-MM-dd")}
+ * @since ${.now?string("yyyy-MM-dd HH:mm:ss")}
  */
 @Data
 <#if table.useBaseEntity>
