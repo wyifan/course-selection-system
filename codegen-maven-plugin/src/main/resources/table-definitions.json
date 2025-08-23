@@ -4,7 +4,7 @@
     {
       "tableName": "admin",
       "entityName": "Admin",
-      "useBaseEntity":true,
+      "useBaseEntity": true,
       "columns": [
         { "javaName": "username", "javaType": "String", "comment": "用户名" },
         { "javaName": "email", "javaType": "String", "comment": "邮箱" },
